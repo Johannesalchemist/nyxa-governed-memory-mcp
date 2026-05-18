@@ -3,8 +3,9 @@ description: Governed memory for accountable AI systems. Audit-trail, policy enf
 license: MIT
 homepage: https://github.com/Johannesalchemist/nyxa-governed-memory-mcp
 npm: nyxa-governed-memory-mcp
-transport: stdio
-command: npx
-args:
-  - -y
-  - nyxa-governed-memory-mcp
+startCommand:
+  type: stdio
+  command: npx
+  args:
+    - -y
+    - nyxa-governed-memory-mcp
