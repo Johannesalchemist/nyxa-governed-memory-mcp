@@ -1,0 +1,5 @@
+HANDOFF.md
+.env
+data/audit.log.jsonl
+dist/
+node_modules/

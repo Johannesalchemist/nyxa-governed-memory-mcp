@@ -1,0 +1,158 @@
+import { randomUUID } from "node:crypto";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod/v3";
+import { loadConfig, type NyxaConfig } from "./config/env.js";
+import { ensureDir } from "./utils/ensureDir.js";
+import { safeJsonStringify } from "./utils/safeJson.js";
+import { AuditLog } from "./audit/AuditLog.js";
+import { enforcePolicy } from "./policy/enforcePolicy.js";
+import { LocalBackend } from "./backend/LocalBackend.js";
+import { RemoteBackendStub } from "./backend/RemoteBackend.js";
+import type { MemoryBackend } from "./backend/MemoryBackend.js";
+import type { AuditEvent } from "./schema/audit.js";
+import { buildSystemStatus } from "./tools/system.status.js";
+import { buildPolicyMode } from "./tools/policy.mode.js";
+import { buildAuditTrace, normalizeAuditTraceLimit } from "./tools/audit.trace.js";
+
+type ToolResultPayload = Record<string, unknown>;
+
+function toolJsonResult(payload: ToolResultPayload) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: safeJsonStringify(payload, 2)
+      }
+    ]
+  };
+}
+
+export class NyxaGovernedMemoryServer {
+  private readonly config: NyxaConfig;
+  private readonly auditLog: AuditLog;
+  private readonly backend: MemoryBackend;
+  private readonly server: McpServer;
+
+  public constructor() {
+    this.config = loadConfig();
+    this.auditLog = new AuditLog(this.config.dataDir);
+    this.backend = this.createBackend(this.config);
+    this.server = new McpServer({
+      name: this.config.appName,
+      version: this.config.version
+    });
+  }
+
+  public async start(): Promise<void> {
+    await ensureDir(this.config.dataDir);
+    await this.auditLog.init();
+
+    this.registerTools();
+
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+  }
+
+  private createBackend(config: NyxaConfig): MemoryBackend {
+    if (config.memoryBackend === "local") {
+      return new LocalBackend(config.dataDir);
+    }
+
+    return new RemoteBackendStub(config.memoryBackend);
+  }
+
+  private registerTools(): void {
+    this.server.tool(
+      "system.status",
+      "Returns MCP status and feature flags.",
+      {},
+      async () =>
+        this.runTool("system.status", {}, async () => {
+          const backendInfo = await this.backend.health();
+          return {
+            ...buildSystemStatus(this.config),
+            backend_status: backendInfo.status
+          };
+        })
+    );
+
+    this.server.tool(
+      "policy.mode",
+      "Returns current policy mode with allowed and blocked capabilities.",
+      {},
+      async () => this.runTool("policy.mode", {}, async () => buildPolicyMode(this.config))
+    );
+
+    this.server.tool(
+      "audit.trace",
+      "Returns recent audit events.",
+      {
+        limit: z.number().int().min(1).max(100).optional()
+      },
+      async (input) =>
+        this.runTool("audit.trace", input, async () => {
+          const limit = normalizeAuditTraceLimit(input);
+          const events = await this.auditLog.recent(limit);
+          return buildAuditTrace(events);
+        })
+    );
+  }
+
+  private async runTool(
+    toolName: string,
+    input: Record<string, unknown>,
+    action: () => Promise<ToolResultPayload>
+  ) {
+    const policyDecision = enforcePolicy(toolName, this.config.agentMode);
+
+    if (!policyDecision.allowed) {
+      await this.audit("blocked", toolName, {
+        reason: policyDecision.reason,
+        input
+      });
+
+      return toolJsonResult({
+        error: "policy_blocked",
+        reason: policyDecision.reason,
+        tool: toolName
+      });
+    }
+
+    try {
+      const payload = await action();
+      await this.audit("allowed", toolName, { input });
+      return toolJsonResult(payload);
+    } catch {
+      await this.audit("error", toolName, { input });
+      return toolJsonResult({
+        error: "internal_error",
+        tool: toolName
+      });
+    }
+  }
+
+  private async audit(
+    result: AuditEvent["result"],
+    toolName: string,
+    details?: Record<string, unknown>
+  ): Promise<void> {
+    const event: AuditEvent = {
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      actor: "mcp",
+      action: "tool.call",
+      tool: toolName,
+      mode: this.config.agentMode,
+      backend: this.config.memoryBackend,
+      result
+    };
+
+    if (details) {
+      event.details = details;
+    }
+
+    await this.auditLog.append(event);
+  }
+}
+

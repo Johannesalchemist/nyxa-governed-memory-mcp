@@ -1,0 +1,30 @@
+{
+  "name": "nyxa-governed-memory-mcp",
+  "version": "0.1.0",
+  "description": "Documentation-first governed memory MCP foundation for Nyxa.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "nyxa",
+    "governed-memory",
+    "audit",
+    "documentation-first"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "dotenv": "16.4.5",
+    "zod": "4.0.17"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsx": "4.20.0",
+    "typescript": "5.7.2"
+  }
+}
