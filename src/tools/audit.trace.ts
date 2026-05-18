@@ -1,8 +1,16 @@
+import type { AuditEvent } from "../schema/audit.js";
+
+export const AUDIT_TRACE_TOOL_ANNOTATIONS = {
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true
+  }
+} as const;
+
 export type AuditTraceInput = {
   limit?: number | undefined;
 };
-
-import type { AuditEvent } from "../schema/audit.js";
 
 export type AuditTraceResponse = {
   events: AuditEvent[];

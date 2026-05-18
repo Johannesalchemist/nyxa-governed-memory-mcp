@@ -10,9 +10,13 @@ import { LocalBackend } from "./backend/LocalBackend.js";
 import { RemoteBackendStub } from "./backend/RemoteBackend.js";
 import type { MemoryBackend } from "./backend/MemoryBackend.js";
 import type { AuditEvent } from "./schema/audit.js";
-import { buildSystemStatus } from "./tools/system.status.js";
-import { buildPolicyMode } from "./tools/policy.mode.js";
-import { buildAuditTrace, normalizeAuditTraceLimit } from "./tools/audit.trace.js";
+import { buildSystemStatus, SYSTEM_STATUS_TOOL_ANNOTATIONS } from "./tools/system.status.js";
+import { buildPolicyMode, POLICY_MODE_TOOL_ANNOTATIONS } from "./tools/policy.mode.js";
+import {
+  AUDIT_TRACE_TOOL_ANNOTATIONS,
+  buildAuditTrace,
+  normalizeAuditTraceLimit
+} from "./tools/audit.trace.js";
 
 type ToolResultPayload = Record<string, unknown>;
 
@@ -80,7 +84,7 @@ export class NyxaGovernedMemoryServer {
     this.server.tool(
       "system.status",
       "Returns MCP status and feature flags.",
-      { readOnlyHint: true },
+      SYSTEM_STATUS_TOOL_ANNOTATIONS,
       async () =>
         this.runTool("system.status", {}, async () => {
           const backendInfo = await this.backend.health();
@@ -94,14 +98,14 @@ export class NyxaGovernedMemoryServer {
     this.server.tool(
       "policy.mode",
       "Returns current policy mode with allowed and blocked capabilities.",
-      { readOnlyHint: true },
+      POLICY_MODE_TOOL_ANNOTATIONS,
       async () => this.runTool("policy.mode", {}, async () => buildPolicyMode(this.config))
     );
 
     this.server.tool(
       "audit.trace",
       "Returns recent audit events.",
-      { readOnlyHint: true },
+      AUDIT_TRACE_TOOL_ANNOTATIONS,
       async (_input, extra) => {
         const input = { limit: extractLimit(extra) };
         const decision = enforcePolicy("audit.trace", this.config.agentMode);

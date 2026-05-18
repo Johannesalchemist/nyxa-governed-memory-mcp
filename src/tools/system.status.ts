@@ -1,5 +1,13 @@
 import type { NyxaConfig } from "../config/env.js";
 
+export const SYSTEM_STATUS_TOOL_ANNOTATIONS = {
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true
+  }
+} as const;
+
 export type SystemStatusResponse = {
   name: "nyxa-governed-memory-mcp";
   version: "0.1.0";

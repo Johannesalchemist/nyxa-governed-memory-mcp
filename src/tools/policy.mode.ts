@@ -1,5 +1,13 @@
 import type { NyxaConfig } from "../config/env.js";
 
+export const POLICY_MODE_TOOL_ANNOTATIONS = {
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true
+  }
+} as const;
+
 export type PolicyModeResponse = {
   mode: string;
   allowed_capabilities: string[];
