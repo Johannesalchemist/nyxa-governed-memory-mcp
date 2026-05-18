@@ -25,3 +25,15 @@ src/
 
 # Logs
 *.log
+
+# Runtime data
+data/audit.log.jsonl
+
+# Internal
+HANDOFF.md
+
+# Runtime data
+data/audit.log.jsonl
+
+# Internal
+HANDOFF.md
