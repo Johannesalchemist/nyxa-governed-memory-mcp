@@ -1,0 +1,5 @@
+name: Nyxa AI Governance Apprentice
+description: Governed memory for accountable AI systems. Audit-trail, policy enforcement, and open signal tracking for MCP-connected agents.
+license: MIT
+homepage: https://github.com/Johannesalchemist/nyxa-governed-memory-mcp
+npm: nyxa-governed-memory-mcp
