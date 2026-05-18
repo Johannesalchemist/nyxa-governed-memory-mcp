@@ -1,7 +1,7 @@
 {
   "name": "nyxa-governed-memory-mcp",
   "version": "0.1.0",
-  "description": "Documentation-first governed memory MCP foundation for Nyxa.",
+  "description": "Nyxa AI Governance Apprentice: an MCP-compatible governed memory layer for audit-ready classification, open-signal handling, risk documentation, and human-supervised AI workflows.",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -13,8 +13,10 @@
     "mcp",
     "nyxa",
     "governed-memory",
-    "audit",
-    "documentation-first"
+    "ai-governance",
+    "audit-trails",
+    "open-signals",
+    "human-supervision"
   ],
   "license": "UNLICENSED",
   "dependencies": {

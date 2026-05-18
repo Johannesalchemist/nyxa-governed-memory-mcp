@@ -1,57 +1,82 @@
-# nyxa-governed-memory-mcp
+# Nyxa Governed Memory MCP
 
-## What this is
-`nyxa-governed-memory-mcp` is a documentation-first MCP server foundation for Claude Code.
-It is designed as a governed memory and audit base, with strict policy enforcement and explicit safety boundaries.
+Nyxa Governed Memory MCP is an MCP-compatible AI Governance Apprentice for governed memory workflows. Governed memory means memory that is classified, sensitivity-aware, auditable, consent-aware, and not automatically treated as confirmed truth.
 
-## What this is not
-This v0.1 server is **not** an execution layer and **not** an automation-first agent tool.
-It does **not** expose shell execution, unrestricted file write, screenshots, email, or external mutation tools.
+This project uses MCP as a connector layer, not as the product itself. The product framing is governance-first: observe, classify, document, and keep humans in control of validation and decisions.
 
-## v0.1 scope
-Only these tools are exposed:
+## What This Is
+
+Nyxa AI Governance Apprentice helps teams structure AI-adjacent memory and audit workflows with explicit policy checks and audit traces.
+
+It is designed for:
+- governed memory classification
+- open-signal handling
+- risk documentation
+- audit trail generation
+- human-supervised AI workflows
+
+## What This Is Not
+
+Public MVP boundaries:
+- no autonomous interpretation
+- no autonomous action execution
+- no confirmed memory without validation
+- no biometric processing
+- no dream interpretation
+- no clinical, psychological, or legal advice
+- no hidden side effects
+
+## Core Invariants
+
+- `open_signal` is not `memory_node`.
+- Unvalidated memory candidates are not confirmed truth.
+- Human operators remain responsible for decisions, validation, and deployment controls.
+- Legal evidence package preparation means organization/documentation support, not legal advice.
+
+## Current Active Tools (v0.1)
+
+The currently active tool surface is intentionally minimal:
 - `system.status`
 - `policy.mode`
 - `audit.trace`
 
-Core guarantees:
-- default mode is `observe_only`
-- startup always ensures the data directory exists
-- every tool call is policy-checked first
-- every tool call is audited to JSONL
-- backend abstraction exists from day one (`local`, `remote`, `dedicated_node`, `customer_owned`)
-- only `local` backend is active in v0.1
+## Planned Public MVP Tool Surface (Roadmap, Not Yet Active)
 
-## Security boundaries
-- no shell execution tools
-- no email tools
-- no screenshot tools
-- no arbitrary filesystem tools
-- no hidden side effects
-- no authoritative memory writes in v0.1
+The following governance-oriented tools are planned for public MVP expansion and are not active in v0.1:
+- `classify_event`
+- `classify_sensitivity`
+- `create_audit_note`
+- `export_governance_report`
+- `prepare_legal_evidence_package`
+- `hold_open_signal`
 
-## Install
+## Installation
+
 ```bash
 npm install
 ```
 
 ## Build
+
 ```bash
 npm run build
 ```
 
 ## Run (dev)
+
 ```bash
 npm run dev
 ```
 
 ## Run (dist)
+
 ```bash
 npm run build
 npm run start
 ```
 
-## Claude Code MCP config example
+## MCP Connector Example
+
 ```json
 {
   "mcpServers": {
@@ -68,21 +93,19 @@ npm run start
 }
 ```
 
-## Feature flags
-From `.env` / environment:
-- `NYXA_DREAMING_ENABLED`
-- `NYXA_APPRENTICE_ENABLED`
-- `NYXA_VISUAL_OBSERVATION_ENABLED`
-- `NYXA_DRAFTS_ENABLED`
-- `NYXA_AUTHORITATIVE_WRITES_ENABLED`
-- `NYXA_EXECUTION_TOOLS_ENABLED`
+## Safe-By-Default Boundaries
 
-v0.1 enforces execution and authoritative writes as disabled.
+- default mode: `observe_only`
+- policy enforcement before every tool call
+- audit event written for every tool call
+- execution tools disabled
+- authoritative writes disabled
 
-## Future roadmap (not in v0.1)
-- governed memory candidate flow
-- dreaming candidates
-- apprentice observation mode extensions
-- visual observation hooks
-- dedicated EU memory node support
-- customer-owned memory backend support
+## Submission Readiness
+
+This repository is structured for governance-first MCP/connector submission with:
+- explicit security and privacy statements
+- documented governance invariants
+- threat model and limitations
+- EU/GDPR alignment notes (design alignment, not certification)
+- controlled, minimal tool exposure in current release
