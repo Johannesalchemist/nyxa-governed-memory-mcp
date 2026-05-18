@@ -1,0 +1,27 @@
+# Backups
+.backup-*/
+
+# Dev
+.env
+.env.*
+*.test.ts
+*.spec.ts
+**/__tests__/
+
+# Git
+.git/
+.gitignore
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build input (src wird nicht benötigt wenn dist/ vorhanden)
+src/
+
+# Logs
+*.log
