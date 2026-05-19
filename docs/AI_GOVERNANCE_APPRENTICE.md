@@ -1,18 +1,18 @@
 # AI Governance Apprentice
 
-Nyxa Governed Memory MCP is positioned as an AI Governance Apprentice.
+Nyxa AI Governance Apprentice is the governance-first framing for Nyxa Governed Memory MCP.
 
-Operating model:
-1. Observe first.
-2. Classify event/sensitivity.
-3. Document rationale and risk signals.
-4. Prepare governance outputs for human review.
-5. Keep human decision authority explicit.
+Operating sequence:
+1. observe
+2. classify
+3. document
+4. prepare audit timeline context
+5. require human decision authority
 
-This is governance support, not autonomous governance replacement.
+This system supports governance workflows. It does not replace human accountability.
 
 Core invariants:
-- `open_signal` is not `memory_node`.
-- No autonomous interpretation.
-- No confirmed memory without validation.
-- No autonomous action execution.
+- open_signal is not memory_node
+- no autonomous interpretation
+- no confirmed memory without validation
+- no autonomous action execution

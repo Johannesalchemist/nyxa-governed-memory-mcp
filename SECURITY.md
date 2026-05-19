@@ -1,25 +1,25 @@
 # Security Policy
 
-## Supported Versions
+## Supported Version Line
 
-Current supported public version line:
 - v0.1.x
 
-## Reporting a Vulnerability
+## Reporting
 
-Please report security issues privately to the project maintainer.
+Please report security issues privately to the maintainer.
 
-Placeholder contact process:
-1. Open a private security report channel (do not post publicly first).
-2. Include reproduction steps, impact, and affected files.
-3. Allow coordinated disclosure before public publication.
+Recommended report content:
+- affected version
+- impact summary
+- reproduction steps
+- expected vs actual behavior
 
 ## Safe Reporting Rules
 
-- Do not include live secrets, credentials, or personal production data in issues.
-- Do not post exploit details publicly before triage.
-- Prefer minimal, reproducible proof of concept.
+- do not publish secrets or credentials in issue trackers
+- do not include personal production data in reports
+- coordinate disclosure before public release
 
-## Scope Notes
+## Scope Note
 
-Nyxa Governed Memory MCP is governance-first and safe-by-default. It is not an execution framework and does not provide shell/email/screenshot mutation tools in v0.1.
+Nyxa Governed Memory MCP is governance-first and safe-by-default. It is not an unrestricted execution framework.

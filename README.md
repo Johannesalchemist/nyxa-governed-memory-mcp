@@ -2,110 +2,66 @@
 
 Nyxa Governed Memory MCP is an MCP-compatible AI Governance Apprentice for governed memory workflows. Governed memory means memory that is classified, sensitivity-aware, auditable, consent-aware, and not automatically treated as confirmed truth.
 
-This project uses MCP as a connector layer, not as the product itself. The product framing is governance-first: observe, classify, document, and keep humans in control of validation and decisions.
+MCP is the connector layer for tool interoperability, not the full governance product by itself. The product framing is governance-first: observe, classify, document, and keep humans in control.
 
-## What This Is
+## What This Repository Provides
 
-Nyxa AI Governance Apprentice helps teams structure AI-adjacent memory and audit workflows with explicit policy checks and audit traces.
+- a governed-memory core for classification and policy-aware handling
+- audit trails for tool calls and governance-relevant transitions
+- open-signal handling boundaries for unresolved or uncertain events
+- documentation-first controls for human-supervised AI workflows
 
-It is designed for:
-- governed memory classification
-- open-signal handling
-- risk documentation
-- audit trail generation
-- human-supervised AI workflows
+## Active Tool Surface (Current)
 
-## What This Is Not
+- system.status
+- policy.mode
+- udit.trace
 
-Public MVP boundaries:
+## Public Submission Scope (Architecture and Documentation)
+
+This public submission focuses on safe-by-default governance boundaries and traceability, including:
+- memory classification and sensitivity awareness
+- audit timelines and event integrity posture
+- explicit separation of uncertain signals from confirmed memory
+- transport and observability boundaries
+
+## Governance Invariants
+
+- open_signal is not memory_node
 - no autonomous interpretation
-- no autonomous action execution
 - no confirmed memory without validation
-- no biometric processing
-- no dream interpretation
+- no autonomous action execution
+- no biometric processing in public MVP
+- no dream interpretation in public MVP
 - no clinical, psychological, or legal advice
-- no hidden side effects
+- human operators remain responsible for decisions and validation
 
-## Core Invariants
+## Safe-by-Default Boundaries
 
-- `open_signal` is not `memory_node`.
-- Unvalidated memory candidates are not confirmed truth.
-- Human operators remain responsible for decisions, validation, and deployment controls.
-- Legal evidence package preparation means organization/documentation support, not legal advice.
+- default mode is observe-first (observe_only)
+- policy checks run before tool outcomes are returned
+- audit events are written for tool calls
+- execution tools and authoritative writes are not enabled by default
 
-## Current Active Tools (v0.1)
+## Build and Run
 
-The currently active tool surface is intentionally minimal:
-- `system.status`
-- `policy.mode`
-- `audit.trace`
-
-## Planned Public MVP Tool Surface (Roadmap, Not Yet Active)
-
-The following governance-oriented tools are planned for public MVP expansion and are not active in v0.1:
-- `classify_event`
-- `classify_sensitivity`
-- `create_audit_note`
-- `export_governance_report`
-- `prepare_legal_evidence_package`
-- `hold_open_signal`
-
-## Installation
-
-```bash
+`ash
 npm install
-```
-
-## Build
-
-```bash
 npm run build
-```
-
-## Run (dev)
-
-```bash
 npm run dev
-```
+`
 
-## Run (dist)
+Dist entry:
 
-```bash
+`ash
 npm run build
 npm run start
-```
+`
 
-## MCP Connector Example
+## Submission Readiness Notes
 
-```json
-{
-  "mcpServers": {
-    "nyxa-governed-memory": {
-      "command": "node",
-      "args": ["/absolute/path/to/nyxa-governed-memory-mcp/dist/index.js"],
-      "env": {
-        "NYXA_AGENT_MODE": "observe_only",
-        "NYXA_MEMORY_BACKEND": "local",
-        "NYXA_DATA_DIR": "/absolute/path/to/nyxa-governed-memory-mcp/data"
-      }
-    }
-  }
-}
-```
-
-## Safe-By-Default Boundaries
-
-- default mode: `observe_only`
-- policy enforcement before every tool call
-- audit event written for every tool call
-- execution tools disabled
-- authoritative writes disabled
-
-## Submission Readiness
-
-This repository is structured for governance-first MCP/connector submission with:
-- explicit security and privacy statements
-- documented governance invariants
-- threat model and limitations
-- EU/GDPR alignment notes (design alignment, not certification)
-- controlled, minimal tool exposure in current release
+- public framing: Nyxa AI Governance Apprentice
+- MCP stdio supported
+- connector and observability boundaries documented
+- threat model and limitations documented
+- security/privacy documentation included

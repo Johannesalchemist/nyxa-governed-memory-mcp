@@ -1,13 +1,13 @@
-# GDPR Alignment (Design)
+# GDPR Alignment (Design-Level)
 
-This document describes design alignment goals. It is not a legal compliance guarantee.
+This document describes design alignment intent, not a legal compliance guarantee.
 
-Design principles:
+Alignment goals:
 - data minimization
 - purpose limitation
-- storage limitation / retention controls
-- operator-controlled export and deletion paths
-- consent-aware deployment responsibility
+- storage limitation and retention controls
+- export/delete support under operator governance
+- consent-aware deployment responsibilities
 
-Operational note:
-- controllers/processors using this software remain responsible for lawful implementation and governance in their context.
+Responsibility boundary:
+- operators remain responsible for lawful implementation in their jurisdiction and use case.

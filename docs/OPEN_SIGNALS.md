@@ -1,15 +1,15 @@
 # Open Signals
 
-An `open_signal` represents held uncertainty, not accepted fact.
+An open_signal is held uncertainty, not accepted fact.
 
 Rules:
-- `open_signal` is not `memory_node`.
-- TTL is required for open signals.
-- Open signals are not retrieved as factual memory.
-- No interpretation while status is closed/unvalidated.
-- Promotion requires explicit validation.
+- open_signal is not memory_node
+- TTL is required
+- closed/unvalidated signals are not treated as factual retrieval context
+- no interpretation while closed
+- validation is required before promotion
 
 Purpose:
-- keep uncertain, high-risk, or unresolved items visible
-- prevent premature consolidation into confirmed memory
-- preserve auditability of unresolved state
+- preserve unresolved context safely
+- prevent premature consolidation
+- keep uncertain items auditable without overstating truth

@@ -1,19 +1,19 @@
 # Memory Classification
 
-Governed memory lifecycle (conceptual):
+Conceptual lifecycle:
 
-`event -> candidate -> validation -> memory_node`
+vent -> candidate -> validation -> memory_node
 
-Interpretation:
-- Event: raw observation/input.
-- Candidate: provisional record, not confirmed truth.
-- Validation: human or policy-governed review step.
-- Memory node: validated record in governed memory space.
+Definitions:
+- event: raw observation/input
+- candidate: provisional item, not confirmed truth
+- validation: explicit review gate
+- memory node: validated record
 
-Sensitivity-aware handling (conceptual classes):
-- low sensitivity: operational/factual context
-- medium sensitivity: preference/process context
-- high sensitivity: requires stronger gating and explicit review
-- restricted domains: blocked or excluded in public MVP
+Sensitivity-aware handling (conceptual):
+- lower sensitivity: operational/factual
+- medium sensitivity: preference/process
+- high sensitivity: stronger gating and explicit review
 
-Public MVP rule: memory is not confirmed automatically.
+Public boundary:
+- no automatic promotion from candidate to confirmed memory
