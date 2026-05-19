@@ -10,11 +10,11 @@ All transport layers must converge on the same governance event meaning, even if
 
 - id
 - source
-- ctor
-- ction
+- actor
+- action
 - payload_hash
-- 	s_monotonic
-- 	s_wall
+- ts_monotonic
+- ts_wall
 - schema_version
 
 ## Recommended Fields
@@ -23,8 +23,9 @@ All transport layers must converge on the same governance event meaning, even if
 - session_id
 - correlation_id
 - sensitivity_class
-- vent_type
+- event_type
 - integrity_hash
+- metadata
 
 ## Deterministic IDs
 
@@ -42,8 +43,8 @@ Raw payload retention, if enabled by an operator, should be explicit, policy-con
 
 ## Time Semantics
 
-- 	s_monotonic: ordering and sequence reliability within runtime/ingestion context
-- 	s_wall: human-readable wall-clock time for cross-system interpretation
+- ts_monotonic: ordering and sequence reliability within runtime/ingestion context
+- ts_wall: human-readable wall-clock time for cross-system interpretation
 
 Both are needed: monotonic time for consistent ordering, wall time for operational forensics and external reporting.
 
