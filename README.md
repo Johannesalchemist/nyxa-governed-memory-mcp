@@ -13,17 +13,31 @@ MCP is the connector layer for tool interoperability, not the full governance pr
 
 ## Active Tool Surface (Current)
 
+Only these tools are active:
 - system.status
 - policy.mode
 - udit.trace
 
-## Public Submission Scope (Architecture and Documentation)
+## Planned Tool Surface (Not Active Yet)
 
-This public submission focuses on safe-by-default governance boundaries and traceability, including:
-- memory classification and sensitivity awareness
-- audit timelines and event integrity posture
-- explicit separation of uncertain signals from confirmed memory
-- transport and observability boundaries
+The following tools are planned and not active in the current release:
+- classify_event
+- classify_sensitivity
+- hold_open_signal
+- create_audit_record
+- xport_governance_report
+- xport_audit_timeline
+
+Planned hold_open_signal behavior (not active yet):
+- holds uncertainty as an open signal
+- TTL required
+- no interpretation while closed
+- no confirmed memory creation
+- no autonomous action
+
+## Observability Boundary
+
+Full action-chain observability requires routing events through Nyxa and only applies to clients that emit or route those events through Nyxa-controlled hooks, wrappers, proxies, or MCP transports.
 
 ## Governance Invariants
 
