@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 import { isNyxaAgentMode, type NyxaAgentMode } from "../policy/modes.js";
 import type { MemoryBackendType } from "../backend/MemoryBackend.js";
+import { loadConnectorConfig } from "../connector/config.js";
+import type { ConnectorConfig } from "../connector/types.js";
 
 function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined || value.trim() === "") {
@@ -52,7 +54,7 @@ function parseBackend(value: string | undefined): MemoryBackendType {
 
 export type NyxaConfig = {
   appName: "nyxa-governed-memory-mcp";
-  version: "0.1.0";
+  version: "0.1.1";
   agentMode: NyxaAgentMode;
   memoryBackend: MemoryBackendType;
   dataDir: string;
@@ -68,6 +70,7 @@ export type NyxaConfig = {
     url: string;
     token: string;
   };
+  connector: ConnectorConfig;
 };
 
 export function loadConfig(): NyxaConfig {
@@ -94,7 +97,7 @@ export function loadConfig(): NyxaConfig {
 
   return {
     appName: "nyxa-governed-memory-mcp",
-    version: "0.1.0",
+    version: "0.1.1",
     agentMode,
     memoryBackend,
     dataDir,
@@ -102,6 +105,7 @@ export function loadConfig(): NyxaConfig {
     remoteMemory: {
       url: process.env.NYXA_REMOTE_MEMORY_URL ?? "",
       token: process.env.NYXA_REMOTE_MEMORY_TOKEN ?? ""
-    }
+    },
+    connector: loadConnectorConfig(process.env.NYXA_CONNECTOR_CONFIG)
   };
 }

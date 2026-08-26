@@ -8,4 +8,13 @@ export type AuditEvent = {
   backend: string;
   result: "allowed" | "blocked" | "error";
   details?: Record<string, unknown>;
+  capability_class?: "I0" | "I1" | "I2" | "I3";
+  policy_decision?: "ALLOWED" | "DENIED" | "REQUIRES_APPROVAL" | "INVALID" | "UNKNOWN";
+  arguments_hash?: string;
+  affected_resource?: string;
+  duration_ms?: number;
+  result_status?: string;
+  previous_event_hash?: string;
+  event_hash?: string;
+  requesting_identity?: string;
 };

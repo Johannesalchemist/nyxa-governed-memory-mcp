@@ -1,0 +1,140 @@
+{
+  "enabled": true,
+  "devEnabled": true,
+  "gitExecutable": "/usr/bin/git",
+  "systemctlExecutable": "/usr/bin/systemctl",
+  "roots": [
+    {
+      "id": "governed-original",
+      "path": "/opt/nyxa-governed-memory-mcp",
+      "access": "read",
+      "trust": "VERIFIED_SOURCE"
+    },
+    {
+      "id": "governed-dev",
+      "path": "/home/jo/dev/nyxa-governed-memory-mcp",
+      "access": "dev",
+      "trust": "VERIFIED_SOURCE",
+      "postPatchTarget": "build"
+    },
+    {
+      "id": "nyxa-governance",
+      "path": "/opt/nyxa/core/governance",
+      "access": "read",
+      "trust": "UNVERIFIED_SOURCE"
+    },
+    {
+      "id": "nyxa-rules",
+      "path": "/opt/nyxa/core/rules",
+      "access": "read",
+      "trust": "UNVERIFIED_SOURCE"
+    }
+  ],
+  "repositories": [
+    {
+      "id": "governed-original",
+      "path": "/opt/nyxa-governed-memory-mcp",
+      "rootId": "governed-original"
+    },
+    {
+      "id": "governed-dev",
+      "path": "/home/jo/dev/nyxa-governed-memory-mcp",
+      "rootId": "governed-dev"
+    }
+  ],
+  "services": [
+    {
+      "id": "ollama",
+      "kind": "systemd",
+      "unit": "ollama.service"
+    },
+    {
+      "id": "docker",
+      "kind": "systemd",
+      "unit": "docker.service"
+    }
+  ],
+  "testTargets": [
+    {
+      "id": "build",
+      "executable": "/usr/bin/npm",
+      "args": ["run", "build"],
+      "cwd": "/home/jo/dev/nyxa-governed-memory-mcp",
+      "timeoutMs": 120000,
+      "trust": "VERIFIED_SOURCE",
+      "integrityFiles": []
+    },
+    {
+      "id": "governance-receipt",
+      "executable": "/usr/bin/node",
+      "args": ["tests/governance/governance_receipt.test.cjs"],
+      "cwd": "/opt/thechat",
+      "timeoutMs": 30000,
+      "trust": "UNVERIFIED_SOURCE",
+      "integrityFiles": [
+        {
+          "path": "/opt/thechat/tests/governance/governance_receipt.test.cjs",
+          "sha256": "9d635d85b29419feb34fdbd1cd5d52cbd6b67aa5a9a924047ee9ecb739ae0b3d"
+        },
+        {
+          "path": "/opt/nyxa/core/governance/governance_receipt.cjs",
+          "sha256": "509e49afe46b1f4240661fe1e7ad5d18142c1311fd3ef4050177d7fe0bf24e9f"
+        }
+      ]
+    },
+    {
+      "id": "core-smoke",
+      "executable": "/usr/bin/node",
+      "args": ["smoke-test.cjs"],
+      "cwd": "/opt/nyxa/core",
+      "timeoutMs": 30000,
+      "trust": "UNVERIFIED_SOURCE",
+      "integrityFiles": [
+        {
+          "path": "/opt/nyxa/core/smoke-test.cjs",
+          "sha256": "589a7773affb1257a39b8fb768d1b27ee17a9aa5f2ecb1b3a580cf71628e9b4e"
+        },
+        {
+          "path": "/opt/nyxa/core/pipeline-item.schema.cjs",
+          "sha256": "11bc3e6602d7109eff738f61889d4c592699a1dc87744a92eb0336569d7b4018"
+        },
+        {
+          "path": "/opt/nyxa/core/policy-engine.cjs",
+          "sha256": "a92b6e8b7e84f09c258a316b68b04d3da0522f5125e42b9108e8cb14e57c8443"
+        },
+        {
+          "path": "/opt/nyxa/core/rules/dsgvo-baseline.json",
+          "sha256": "b283dc1f59ecb82adea4182440fd2af17aaa8da72cf8c7e09955b5879b991c4c"
+        }
+      ]
+    },
+    {
+      "id": "drift-audit",
+      "executable": "/usr/bin/node",
+      "args": ["drift_audit.test.cjs"],
+      "cwd": "/opt/nyxa/core/governance",
+      "timeoutMs": 30000,
+      "trust": "UNVERIFIED_SOURCE",
+      "integrityFiles": [
+        {
+          "path": "/opt/nyxa/core/governance/drift_audit.test.cjs",
+          "sha256": "c22f3e42426a1f3bbec9fb22a9599c7d9830b43c4dd4fdf696adf04d99d6b1f6"
+        },
+        {
+          "path": "/opt/nyxa/core/governance/drift_audit.cjs",
+          "sha256": "f069bf1874686d15647a4fd905675601b885a01796010b9ea2331f49b0a1d1c4"
+        }
+      ]
+    }
+  ],
+  "limits": {
+    "maxOutputChars": 50000,
+    "maxFileBytes": 1048576,
+    "maxSearchResults": 100,
+    "maxSearchFiles": 5000,
+    "maxDirectoryEntries": 1000,
+    "maxPatchBytes": 200000,
+    "toolTimeoutMs": 30000,
+    "rateLimitPerMinute": 60
+  }
+}

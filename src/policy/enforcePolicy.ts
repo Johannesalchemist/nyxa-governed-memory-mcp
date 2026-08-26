@@ -5,6 +5,7 @@ export type PolicyDecision = {
   allowed: boolean;
   reason: string;
   policy?: ToolPolicy;
+  outcome: "ALLOWED" | "DENIED" | "REQUIRES_APPROVAL" | "INVALID" | "UNKNOWN";
 };
 
 export function enforcePolicy(toolName: string, mode: NyxaAgentMode): PolicyDecision {
@@ -13,7 +14,8 @@ export function enforcePolicy(toolName: string, mode: NyxaAgentMode): PolicyDeci
   if (!policy) {
     return {
       allowed: false,
-      reason: "tool_policy_not_found"
+      reason: "tool_policy_not_found",
+      outcome: "UNKNOWN"
     };
   }
 
@@ -21,6 +23,7 @@ export function enforcePolicy(toolName: string, mode: NyxaAgentMode): PolicyDeci
     return {
       allowed: false,
       reason: "tool_not_allowed_in_v01",
+      outcome: policy.requiresHumanApproval ? "REQUIRES_APPROVAL" : "DENIED",
       policy
     };
   }
@@ -29,6 +32,7 @@ export function enforcePolicy(toolName: string, mode: NyxaAgentMode): PolicyDeci
     return {
       allowed: false,
       reason: "tool_blocked_high_execution_risk",
+      outcome: "DENIED",
       policy
     };
   }
@@ -37,6 +41,7 @@ export function enforcePolicy(toolName: string, mode: NyxaAgentMode): PolicyDeci
     return {
       allowed: false,
       reason: "mode_below_minimum",
+      outcome: "DENIED",
       policy
     };
   }
@@ -44,6 +49,7 @@ export function enforcePolicy(toolName: string, mode: NyxaAgentMode): PolicyDeci
   return {
     allowed: true,
     reason: "allowed",
+    outcome: "ALLOWED",
     policy
   };
 }

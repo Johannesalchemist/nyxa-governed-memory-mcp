@@ -10,7 +10,7 @@ export const SYSTEM_STATUS_TOOL_ANNOTATIONS = {
 
 export type SystemStatusResponse = {
   name: "nyxa-governed-memory-mcp";
-  version: "0.1.0";
+  version: "0.1.1";
   agent_mode: string;
   backend: string;
   feature_flags: {

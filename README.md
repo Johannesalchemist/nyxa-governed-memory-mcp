@@ -1,81 +1,84 @@
 # Nyxa Governed Memory MCP
 
-Nyxa Governed Memory MCP is an MCP-compatible AI Governance Apprentice for governed memory workflows. Governed memory means memory that is classified, sensitivity-aware, auditable, consent-aware, and not automatically treated as confirmed truth.
+Nyxa Governed Memory MCP is a governance-first MCP server. The secure connector
+extends the existing server; it is not a parallel MCP and never exposes a generic
+shell.
 
-MCP is the connector layer for tool interoperability, not the full governance product by itself. The product framing is governance-first: observe, classify, document, and keep humans in control.
+## Security model
 
-## What This Repository Provides
+The execution path is:
 
-- a governed-memory core for classification and policy-aware handling
-- audit trails for tool calls and governance-relevant transitions
-- open-signal handling boundaries for unresolved or uncertain events
-- documentation-first controls for human-supervised AI workflows
+`Intent -> Classification -> Capability -> Constraint Check -> Authority Check -> Execute/Reject -> Evidence -> Audit`
 
-## Active Tool Surface (Current)
+Unknown actions fail closed. Proposal authority is not commit authority.
 
-Only these tools are active:
-- system.status
-- policy.mode
-- udit.trace
+Capability classes:
 
-## Planned Tool Surface (Not Active Yet)
+- **I0 READ**: scoped, non-mutating inspection.
+- **I1 REVERSIBLE DEV**: approved test targets and single-file patches inside an
+  explicitly configured development root.
+- **I2 CONTROLLED CHANGE**: not exposed by v0.1.
+- **I3 FORBIDDEN**: technically unreachable by v0.1.
 
-The following tools are planned and not active in the current release:
-- classify_event
-- classify_sensitivity
-- hold_open_signal
-- create_audit_record
-- xport_governance_report
-- xport_audit_timeline
+## Active tools
 
-Planned hold_open_signal behavior (not active yet):
-- holds uncertainty as an open signal
-- TTL required
-- no interpretation while closed
-- no confirmed memory creation
-- no autonomous action
+Legacy governance tools remain available:
 
-## Observability Boundary
+- `system.status`
+- `policy.mode`
+- `audit.trace`
 
-Full action-chain observability requires routing events through Nyxa and only applies to clients that emit or route those events through Nyxa-controlled hooks, wrappers, proxies, or MCP transports.
+Secure connector v0.1 adds:
 
-## Governance Invariants
+- `nyxa_system_status`
+- `nyxa_list`
+- `nyxa_read_file`
+- `nyxa_search`
+- `nyxa_git_status`
+- `nyxa_git_diff`
+- `nyxa_logs`
+- `nyxa_run_test`
+- `nyxa_apply_patch`
 
-- open_signal is not memory_node
-- no autonomous interpretation
-- no confirmed memory without validation
-- no autonomous action execution
-- no biometric processing in public MVP
-- no dream interpretation in public MVP
-- no clinical, psychological, or legal advice
-- human operators remain responsible for decisions and validation
+There is deliberately no `exec`, `shell`, `run_command`, `ssh_exec`, or equivalent
+free-form command tool.
 
-## Safe-by-Default Boundaries
+## Configuration
 
-- default mode is observe-first (observe_only)
-- policy checks run before tool outcomes are returned
-- audit events are written for tool calls
-- execution tools and authoritative writes are not enabled by default
+The connector is deny-all unless `NYXA_CONNECTOR_CONFIG` points to a valid JSON
+configuration. Start from `config/connector.dev.example.json`, review every root,
+repository, service, and test target, and keep production paths read-only.
 
-## Build and Run
+The example contains no credentials. Secret-like files, binary files, traversal,
+symlink escapes, unapproved services, unapproved test commands, and writes outside
+the development root are rejected.
 
-`ash
-npm install
-npm run build
-npm run dev
-`
+## Build and verify
 
-Dist entry:
+Use the repository's existing dependency set:
 
-`ash
-npm run build
-npm run start
-`
+```sh
+npm run test:all
+```
 
-## Submission Readiness Notes
+This builds TypeScript, runs security and adversarial tests, and exercises the real
+MCP STDIO transport. No dependency installation is part of the v0.1 change.
 
-- public framing: Nyxa AI Governance Apprentice
-- MCP stdio supported
-- connector and observability boundaries documented
-- threat model and limitations documented
-- security/privacy documentation included
+Start locally after review:
+
+```sh
+NYXA_CONNECTOR_CONFIG=/absolute/path/to/reviewed-config.json npm run start
+```
+
+The existing loopback `/tool` endpoint is outside this implementation and must
+remain bound to `127.0.0.1:3101`.
+
+## Deployment boundary
+
+v0.1 is a development implementation only. A later runtime deployment must use a
+dedicated unprivileged Linux user with no sudo and no Docker-group membership.
+No runtime user, service, tunnel, remote endpoint, or production activation is
+created here.
+
+See [Secure Connector v0.1](docs/SECURE_CONNECTOR_V01.md) and
+[Threat Model](docs/THREAT_MODEL.md).
