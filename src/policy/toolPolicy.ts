@@ -50,8 +50,44 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   nyxa_apply_patch: devPolicy("nyxa_apply_patch", "medium"),
   // Proposing is always safe (I0) — only the underlying action, once ALLOWed by gamma, carries
   // real risk, and that action is checked against its OWN ToolPolicy, not this one.
-  nyxa_propose_action: readPolicy("nyxa_propose_action")
+  nyxa_propose_action: readPolicy("nyxa_propose_action"),
+
+  // Self-model reads are always I0 (safe, side-effect-free).
+  nyxa_self_model_read: readPolicy("nyxa_self_model_read"),
+
+  // Self-model writes: I1 (reversible dev-tier) for state that legitimately changes at
+  // runtime, dispatched only through nyxa_propose_action -> gamma. `identity` is deliberately
+  // I2: gamma's C3 check unconditionally denies I2/I3, so identity cannot be changed through
+  // this governed runtime path at all in v1 -- it can only be seeded at deploy time by writing
+  // data/self-model/identity.json directly. That is intentional: identity is meant to be
+  // stable, not something a running proposal can casually rewrite.
+  nyxa_self_model_write_identity: selfModelWritePolicy("nyxa_self_model_write_identity", "I2"),
+  nyxa_self_model_write_personality: selfModelWritePolicy("nyxa_self_model_write_personality", "I1"),
+  nyxa_self_model_write_self_model: selfModelWritePolicy("nyxa_self_model_write_self_model", "I1"),
+  nyxa_self_model_write_current_state: selfModelWritePolicy("nyxa_self_model_write_current_state", "I1"),
+  nyxa_self_model_write_belief: selfModelWritePolicy("nyxa_self_model_write_belief", "I1"),
+  nyxa_self_model_write_capability_limitation: selfModelWritePolicy(
+    "nyxa_self_model_write_capability_limitation",
+    "I1"
+  ),
+  nyxa_self_model_write_goal: selfModelWritePolicy("nyxa_self_model_write_goal", "I1"),
+  nyxa_self_model_write_autobiographical_event: selfModelWritePolicy(
+    "nyxa_self_model_write_autobiographical_event",
+    "I1"
+  )
 };
+
+function selfModelWritePolicy(toolName: string, capabilityClass: CapabilityClass): ToolPolicy {
+  return {
+    toolName,
+    minimumMode: "draft",
+    writesAuthoritativeMemory: true,
+    requiresHumanApproval: false,
+    executionRisk: "low",
+    allowedInV01: true,
+    capabilityClass
+  };
+}
 
 function readPolicy(toolName: string): ToolPolicy {
   return {

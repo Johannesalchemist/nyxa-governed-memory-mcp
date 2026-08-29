@@ -33,7 +33,13 @@ export const ProposalSchema = z
       })
       .strict(),
     rationale: z.string().max(4000).optional(),
-    opposition: z.string().max(4000).optional()
+    opposition: z.string().max(4000).optional(),
+    // Structured write content for actions whose effect can't be expressed as a single
+    // target string (e.g. self-model domain writes). Optional and additive: no existing
+    // proposal or test that omits it is affected. Each dispatch case in server.ts decides for
+    // itself how to interpret this — gamma never reads it, matching the treatment of
+    // rationale/opposition.
+    payload: z.record(z.string(), z.unknown()).optional()
   })
   .strict();
 

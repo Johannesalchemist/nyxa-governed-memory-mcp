@@ -19,6 +19,8 @@ import { buildPolicyMode } from "./tools/policy.mode.js";
 import { buildAuditTrace, normalizeAuditTraceLimit } from "./tools/audit.trace.js";
 import { parseProposal, ProposalValidationError } from "./governance/proposal.js";
 import { evaluateProposal } from "./governance/gamma.js";
+import { SelfModelStore } from "./self-model/store.js";
+import { IdentityRecordSchema, PersonalityRecordSchema, SelfModelRecordSchema, CurrentStateSnapshotSchema, BeliefRecordSchema, CapabilityLimitationRecordSchema, GoalRecordSchema, AutobiographicalEventSchema, SELF_MODEL_DOMAINS } from "./self-model/types.js";
 const READ_ANNOTATIONS = {
     readOnlyHint: true,
     destructiveHint: false,
@@ -116,6 +118,16 @@ const GOVERNANCE_TOOLS = [
             "through the same execution path the direct nyxa_* tools use; on DENY/ESCALATE/DEGRADE/UNKNOWN, " +
             "nothing executes.",
         inputSchema: objectSchema({ proposal: { type: "object" } }, ["proposal"]),
+        annotations: READ_ANNOTATIONS
+    }
+];
+const SELF_MODEL_TOOLS = [
+    {
+        name: "nyxa_self_model_read",
+        description: "Reads persistent self-referential state (identity/personality/self_model/current_state/" +
+            "beliefs/capability_limitations/goals/autobiographical/change_history/all). Always I0, " +
+            "never governed by a proposal -- reads are side-effect-free.",
+        inputSchema: objectSchema({ domain: { type: "string", enum: [...SELF_MODEL_DOMAINS, "autobiographical", "change_history", "all"] }, limit: integerSchema(1, 200) }, ["domain"]),
         annotations: READ_ANNOTATIONS
     }
 ];
@@ -221,12 +233,14 @@ export class NyxaGovernedMemoryServer {
     server;
     connector;
     rateLimiter;
+    selfModel;
     constructor() {
         this.config = loadConfig();
         this.auditLog = new AuditLog(this.config.dataDir);
         this.backend = this.createBackend(this.config);
         this.connector = new SecureConnector(this.config.connector, this.config.dataDir);
         this.rateLimiter = new RateLimiter(this.config.connector.limits.rateLimitPerMinute);
+        this.selfModel = new SelfModelStore(this.config.dataDir);
         this.server = new Server({
             name: this.config.appName,
             version: this.config.version
@@ -238,8 +252,29 @@ export class NyxaGovernedMemoryServer {
     async start() {
         await ensureDir(this.config.dataDir);
         await this.auditLog.init();
+        await this.selfModel.init();
+        await this.recordSessionStart();
         this.registerHandlers();
         await this.server.connect(new StdioServerTransport());
+    }
+    /**
+     * Continuity mechanism: on every boot, write a system-generated "session_start" event that
+     * chains (via SelfModelStore's own hash chain, see self-model/store.ts) onto whatever the
+     * last event of the previous run was -- including across a full process restart, since the
+     * chain state is reconstructed from disk in SelfModelStore.init(), not held only in memory.
+     * This makes "can we walk the chain backward across a restart" a real, checkable property
+     * instead of an unverified claim.
+     */
+    async recordSessionStart() {
+        const sessionId = randomUUID();
+        await this.selfModel.recordSystemEvent({
+            occurredAt: new Date().toISOString(),
+            actor: "self",
+            eventType: "session_start",
+            srmTag: "FACT",
+            statement: `nyxa-governed-memory-mcp process started (session ${sessionId})`,
+            source: "server_boot"
+        });
     }
     createBackend(config) {
         if (config.memoryBackend === "local")
@@ -248,7 +283,7 @@ export class NyxaGovernedMemoryServer {
     }
     registerHandlers() {
         this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-            tools: [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS]
+            tools: [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS]
         }));
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const name = request.params.name;
@@ -268,6 +303,10 @@ export class NyxaGovernedMemoryServer {
                 assertKeys(input, ["limit"]);
                 const limit = optionalInteger(input, "limit", 1, 100);
                 return await this.runAuditTrace(limit);
+            }
+            if (name === "nyxa_self_model_read") {
+                assertKeys(input, ["domain", "limit"]);
+                return await this.handleSelfModelRead(input);
             }
             if (name === "nyxa_propose_action") {
                 return await this.handleProposeAction(input);
@@ -361,7 +400,7 @@ export class NyxaGovernedMemoryServer {
             }, true);
         }
         try {
-            const payload = await this.executeAllowedProposal(proposal);
+            const payload = await this.executeAllowedProposal(proposal, decision);
             await this.auditGovernance("allowed", toolPolicy?.capabilityClass, "ALLOWED", started, "success", affectedResource);
             return toolJsonResult({ policy_decision: "ALLOW", proposed_action: proposal.action, result: payload });
         }
@@ -369,6 +408,64 @@ export class NyxaGovernedMemoryServer {
             const safeError = asConnectorError(error);
             await this.auditGovernance("blocked", toolPolicy?.capabilityClass, safeError.outcome, started, safeError.code, affectedResource);
             return toolJsonResult({ policy_decision: safeError.outcome, error: { code: safeError.code, message: safeError.publicMessage } }, true);
+        }
+    }
+    async handleSelfModelRead(input) {
+        const started = performance.now();
+        const decision = enforcePolicy("nyxa_self_model_read", this.config.agentMode);
+        const domain = requiredString(input, "domain", 50);
+        if (!decision.allowed) {
+            await this.audit("blocked", "nyxa_self_model_read", { reason: decision.reason, domain });
+            return toolJsonResult({ error: "policy_blocked", reason: decision.reason, tool: "nyxa_self_model_read" }, true);
+        }
+        const limit = optionalInteger(input, "limit", 1, 200) ?? 20;
+        try {
+            const payload = await this.readSelfModelDomain(domain, limit);
+            await this.audit("allowed", "nyxa_self_model_read", { domain });
+            return toolJsonResult(payload);
+        }
+        catch {
+            await this.audit("error", "nyxa_self_model_read", { domain });
+            return toolJsonResult({ error: "internal_error", tool: "nyxa_self_model_read" }, true);
+        }
+        finally {
+            void started;
+        }
+    }
+    async readSelfModelDomain(domain, limit) {
+        switch (domain) {
+            case "identity":
+                return { identity: await this.selfModel.readIdentity() };
+            case "personality":
+                return { personality: await this.selfModel.readPersonality() };
+            case "self_model":
+                return { self_model: await this.selfModel.readSelfModel() };
+            case "current_state":
+                return { current_state: await this.selfModel.readCurrentState() };
+            case "belief":
+                return { beliefs: await this.selfModel.readBeliefs() };
+            case "capability_limitation":
+                return { capability_limitations: await this.selfModel.readCapabilityLimitations() };
+            case "goal":
+                return { goals: await this.selfModel.readGoals() };
+            case "autobiographical":
+                return { autobiographical: await this.selfModel.recentAutobiographical(limit) };
+            case "change_history":
+                return { change_history: await this.selfModel.readChangeHistory(limit) };
+            case "all":
+                return {
+                    identity: await this.selfModel.readIdentity(),
+                    personality: await this.selfModel.readPersonality(),
+                    self_model: await this.selfModel.readSelfModel(),
+                    current_state: await this.selfModel.readCurrentState(),
+                    beliefs: await this.selfModel.readBeliefs(),
+                    capability_limitations: await this.selfModel.readCapabilityLimitations(),
+                    goals: await this.selfModel.readGoals(),
+                    autobiographical: await this.selfModel.recentAutobiographical(limit),
+                    change_history: await this.selfModel.readChangeHistory(limit)
+                };
+            default:
+                throw new ConnectorError("arguments_invalid", `Unknown self-model domain: ${String(domain)}`, "INVALID");
         }
     }
     /**
@@ -379,7 +476,7 @@ export class NyxaGovernedMemoryServer {
      * gamma, but execution returns a clear "not yet supported" error rather than guessing extra
      * arguments from a single target field. Call the direct tool for those in v1.
      */
-    async executeAllowedProposal(proposal) {
+    async executeAllowedProposal(proposal, decision) {
         switch (proposal.action) {
             case "nyxa_read_file":
                 return await this.connector.readFile(proposal.target);
@@ -389,9 +486,79 @@ export class NyxaGovernedMemoryServer {
                 return await this.connector.gitStatus(proposal.target);
             case "nyxa_run_test":
                 return await this.connector.runTest(proposal.target);
+            case "nyxa_self_model_write_identity":
+            case "nyxa_self_model_write_personality":
+            case "nyxa_self_model_write_self_model":
+            case "nyxa_self_model_write_current_state":
+            case "nyxa_self_model_write_belief":
+            case "nyxa_self_model_write_capability_limitation":
+            case "nyxa_self_model_write_goal":
+            case "nyxa_self_model_write_autobiographical_event":
+                return await this.executeSelfModelWrite(proposal, decision);
             default:
                 throw new ConnectorError("proposal_dispatch_unsupported", `Governance ALLOWed '${proposal.action}', but structured-proposal dispatch does not yet ` +
                     "support this tool's multi-argument shape. Use the direct tool call for this action in v1.", "INVALID");
+        }
+    }
+    /**
+     * Turns proposal.payload (structured write content -- see governance/proposal.ts) plus
+     * proposal.provenance into the change-metadata every self-model record requires, then routes
+     * to the matching SelfModelStore.writeX(record, decision) call. `decision` here is only ever
+     * the real GammaDecision that already passed the outcome === "ALLOW" check in
+     * handleProposeAction just above, so SelfModelStore's own assertAllowed() guard is redundant
+     * defense-in-depth here, not the only thing standing between a caller and an ungoverned write.
+     */
+    async executeSelfModelWrite(proposal, decision) {
+        const meta = {
+            writtenAt: new Date().toISOString(),
+            writtenBy: proposal.provenance.requestingIdentity,
+            taskId: proposal.provenance.taskId,
+            runId: proposal.provenance.runId
+        };
+        const payload = proposal.payload ?? {};
+        switch (proposal.action) {
+            case "nyxa_self_model_write_identity": {
+                const record = IdentityRecordSchema.parse({ ...payload, ...meta });
+                await this.selfModel.writeIdentity(record, decision);
+                return { written: "identity" };
+            }
+            case "nyxa_self_model_write_personality": {
+                const record = PersonalityRecordSchema.parse({ ...payload, ...meta });
+                await this.selfModel.writePersonality(record, decision);
+                return { written: "personality" };
+            }
+            case "nyxa_self_model_write_self_model": {
+                const record = SelfModelRecordSchema.parse({ ...payload, ...meta });
+                await this.selfModel.writeSelfModel(record, decision);
+                return { written: "self_model" };
+            }
+            case "nyxa_self_model_write_current_state": {
+                const record = CurrentStateSnapshotSchema.parse({ ...payload, ...meta });
+                await this.selfModel.writeCurrentState(record, decision);
+                return { written: "current_state" };
+            }
+            case "nyxa_self_model_write_belief": {
+                const record = BeliefRecordSchema.parse({ ...payload, ...meta });
+                await this.selfModel.writeBelief(record, decision);
+                return { written: "belief", id: record.id };
+            }
+            case "nyxa_self_model_write_capability_limitation": {
+                const record = CapabilityLimitationRecordSchema.parse({ ...payload, ...meta });
+                await this.selfModel.writeCapabilityLimitation(record, decision);
+                return { written: "capability_limitation", id: record.id };
+            }
+            case "nyxa_self_model_write_goal": {
+                const record = GoalRecordSchema.parse({ ...payload, ...meta });
+                await this.selfModel.writeGoal(record, decision);
+                return { written: "goal", id: record.id };
+            }
+            case "nyxa_self_model_write_autobiographical_event": {
+                const record = AutobiographicalEventSchema.omit({ seq: true, previousEventHash: true, eventHash: true }).parse(payload);
+                const event = await this.selfModel.writeAutobiographicalEvent(record, decision);
+                return { written: "autobiographical_event", seq: event.seq };
+            }
+            default:
+                throw new ConnectorError("proposal_dispatch_unsupported", `Unhandled self-model write action: ${proposal.action}`, "INVALID");
         }
     }
     async runAuditTrace(limit) {
