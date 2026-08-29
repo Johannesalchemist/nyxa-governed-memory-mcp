@@ -12,6 +12,7 @@ import { ensureDir } from "./utils/ensureDir.js";
 import { safeJsonStringify } from "./utils/safeJson.js";
 import { AuditLog } from "./audit/AuditLog.js";
 import { enforcePolicy } from "./policy/enforcePolicy.js";
+import { TOOL_POLICIES } from "./policy/toolPolicy.js";
 import { LocalBackend } from "./backend/LocalBackend.js";
 import { RemoteBackendStub } from "./backend/RemoteBackend.js";
 import type { MemoryBackend } from "./backend/MemoryBackend.js";
@@ -24,6 +25,8 @@ import type { CapabilityClass, PolicyOutcome } from "./connector/types.js";
 import { buildSystemStatus } from "./tools/system.status.js";
 import { buildPolicyMode } from "./tools/policy.mode.js";
 import { buildAuditTrace, normalizeAuditTraceLimit } from "./tools/audit.trace.js";
+import { parseProposal, ProposalValidationError, type ValidatedProposal } from "./governance/proposal.js";
+import { evaluateProposal, type GammaOutcome } from "./governance/gamma.js";
 
 type ToolResultPayload = object;
 type Input = Record<string, unknown>;
@@ -120,6 +123,20 @@ const CONNECTOR_TOOLS = [
   }
 ] as const;
 
+const GOVERNANCE_TOOLS = [
+  {
+    name: "nyxa_propose_action",
+    description:
+      "Submits a structured proposal (actor/action/target/scope/claims/provenance) for deterministic " +
+      "governance evaluation (gamma) before any underlying tool executes. Optional rationale/opposition " +
+      "fields are advisory, recorded for audit only, and never influence the decision. On ALLOW, dispatches " +
+      "through the same execution path the direct nyxa_* tools use; on DENY/ESCALATE/DEGRADE/UNKNOWN, " +
+      "nothing executes.",
+    inputSchema: objectSchema({ proposal: { type: "object" as const } }, ["proposal"]),
+    annotations: READ_ANNOTATIONS
+  }
+] as const;
+
 const LEGACY_TOOLS = [
   {
     name: "system.status",
@@ -198,6 +215,28 @@ function safeResource(toolName: string, input: Input): string {
   return toolName;
 }
 
+/**
+ * AuditEvent.policy_decision only has ALLOWED/DENIED/REQUIRES_APPROVAL/INVALID/UNKNOWN (the
+ * pre-existing PolicyOutcome union). Rather than widen that shared schema, gamma's two extra
+ * outcomes are mapped onto the closest existing value: ESCALATE -> REQUIRES_APPROVAL (both mean
+ * "route to a human, don't execute"), DEGRADE -> UNKNOWN (no dedicated audit state exists yet
+ * for infra-degradation; this is a documented approximation until real DEGRADE wiring lands).
+ */
+function mapGammaOutcomeToAuditDecision(outcome: GammaOutcome): PolicyOutcome {
+  switch (outcome) {
+    case "ALLOW":
+      return "ALLOWED";
+    case "DENY":
+      return "DENIED";
+    case "ESCALATE":
+      return "REQUIRES_APPROVAL";
+    case "DEGRADE":
+      return "UNKNOWN";
+    case "UNKNOWN":
+      return "UNKNOWN";
+  }
+}
+
 export class NyxaGovernedMemoryServer {
   private readonly config: NyxaConfig;
   private readonly auditLog: AuditLog;
@@ -235,7 +274,7 @@ export class NyxaGovernedMemoryServer {
 
   private registerHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [...LEGACY_TOOLS, ...CONNECTOR_TOOLS]
+      tools: [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS]
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -256,6 +295,9 @@ export class NyxaGovernedMemoryServer {
         assertKeys(input, ["limit"]);
         const limit = optionalInteger(input, "limit", 1, 100);
         return await this.runAuditTrace(limit);
+      }
+      if (name === "nyxa_propose_action") {
+        return await this.handleProposeAction(input);
       }
       if (CONNECTOR_TOOLS.some((tool) => tool.name === name)) {
         return await this.dispatchConnectorTool(name, input);
@@ -326,6 +368,123 @@ export class NyxaGovernedMemoryServer {
           throw new ConnectorError("unknown_tool", "Unknown tool.", "UNKNOWN");
       }
     });
+  }
+
+  /**
+   * Governance front door: validates the envelope, runs it through the deterministic gamma
+   * decision engine, and only on ALLOW dispatches to the SAME underlying SecureConnector methods
+   * the direct nyxa_* tools use (executeAllowedProposal below) — this is not a second executor.
+   */
+  private async handleProposeAction(input: Input) {
+    assertKeys(input, ["proposal"]);
+    const started = performance.now();
+    const rawProposal = input["proposal"];
+
+    let proposal: ValidatedProposal;
+    try {
+      proposal = parseProposal(rawProposal);
+    } catch (error) {
+      const validationError =
+        error instanceof ProposalValidationError
+          ? error
+          : new ProposalValidationError("proposal_invalid", "Proposal failed schema validation.");
+      await this.auditGovernance(
+        "blocked",
+        undefined,
+        "INVALID",
+        started,
+        validationError.code,
+        safeResource("nyxa_propose_action", input)
+      );
+      return toolJsonResult(
+        { policy_decision: "INVALID", error: { code: validationError.code, message: validationError.message } },
+        true
+      );
+    }
+
+    const toolPolicy = TOOL_POLICIES[proposal.action];
+    const decision = evaluateProposal(proposal, {
+      toolPolicy,
+      mode: this.config.agentMode,
+      now: Date.now()
+    });
+    const auditDecision = mapGammaOutcomeToAuditDecision(decision.outcome);
+    const affectedResource = safeResource(proposal.action, { target: proposal.target });
+
+    if (decision.outcome !== "ALLOW") {
+      await this.auditGovernance(
+        "blocked",
+        toolPolicy?.capabilityClass,
+        auditDecision,
+        started,
+        `${decision.domain ?? "none"}:${decision.reason}`,
+        affectedResource
+      );
+      return toolJsonResult(
+        {
+          policy_decision: decision.outcome,
+          domain: decision.domain,
+          reason: decision.reason,
+          proposed_action: proposal.action
+        },
+        true
+      );
+    }
+
+    try {
+      const payload = await this.executeAllowedProposal(proposal);
+      await this.auditGovernance(
+        "allowed",
+        toolPolicy?.capabilityClass,
+        "ALLOWED",
+        started,
+        "success",
+        affectedResource
+      );
+      return toolJsonResult({ policy_decision: "ALLOW", proposed_action: proposal.action, result: payload });
+    } catch (error) {
+      const safeError = asConnectorError(error);
+      await this.auditGovernance(
+        "blocked",
+        toolPolicy?.capabilityClass,
+        safeError.outcome,
+        started,
+        safeError.code,
+        affectedResource
+      );
+      return toolJsonResult(
+        { policy_decision: safeError.outcome, error: { code: safeError.code, message: safeError.publicMessage } },
+        true
+      );
+    }
+  }
+
+  /**
+   * Only a curated subset of single-target tools are dispatchable through a structured proposal
+   * in this v1 (their whole call shape reduces to one `target` string, matching the envelope).
+   * Multi-argument tools (nyxa_search, nyxa_git_diff, nyxa_logs, nyxa_apply_patch) are not yet
+   * dispatchable this way — a proposal for one of them can still be evaluated and ALLOWed by
+   * gamma, but execution returns a clear "not yet supported" error rather than guessing extra
+   * arguments from a single target field. Call the direct tool for those in v1.
+   */
+  private async executeAllowedProposal(proposal: ValidatedProposal): Promise<ToolResultPayload> {
+    switch (proposal.action) {
+      case "nyxa_read_file":
+        return await this.connector.readFile(proposal.target);
+      case "nyxa_list":
+        return await this.connector.list(proposal.target);
+      case "nyxa_git_status":
+        return await this.connector.gitStatus(proposal.target);
+      case "nyxa_run_test":
+        return await this.connector.runTest(proposal.target);
+      default:
+        throw new ConnectorError(
+          "proposal_dispatch_unsupported",
+          `Governance ALLOWed '${proposal.action}', but structured-proposal dispatch does not yet ` +
+            "support this tool's multi-argument shape. Use the direct tool call for this action in v1.",
+          "INVALID"
+        );
+    }
   }
 
   private async runAuditTrace(limit: number | undefined) {
@@ -440,6 +599,32 @@ export class NyxaGovernedMemoryServer {
       result_status: resultStatus,
       requesting_identity: "unavailable:stdio",
       ...(details ? { details } : {})
+    });
+  }
+
+  private async auditGovernance(
+    result: AuditEvent["result"],
+    capability: CapabilityClass | undefined,
+    decision: PolicyOutcome,
+    started: number,
+    resultStatus: string,
+    affectedResource: string
+  ): Promise<void> {
+    await this.auditLog.append({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      actor: "mcp",
+      action: "tool.call",
+      tool: "nyxa_propose_action",
+      mode: this.config.agentMode,
+      backend: this.config.memoryBackend,
+      result,
+      ...(capability ? { capability_class: capability } : {}),
+      policy_decision: decision,
+      affected_resource: affectedResource,
+      duration_ms: Math.max(0, Math.round(performance.now() - started)),
+      result_status: resultStatus,
+      requesting_identity: "unavailable:stdio"
     });
   }
 

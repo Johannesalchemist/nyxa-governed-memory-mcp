@@ -72,7 +72,7 @@ test("real MCP stdio surface is typed, scoped and fail-closed", async (context) 
 
   const search = parseResult(await client.callTool({
     name: "nyxa_search",
-    arguments: { query: "Governance", path: "governed-original:/README.md", max_results: 5 }
+    arguments: { query: "governance", path: "governed-original:/README.md", max_results: 5 }
   }));
   assert.equal(search.policy_decision, "ALLOWED");
   assert.ok(search.data.matches.length > 0);

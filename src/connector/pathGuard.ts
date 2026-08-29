@@ -13,10 +13,23 @@ const blockedFilePatterns: RegExp[] = [
   /(?:^|[._-])(?:secret|credential|private[_-]?key)(?:[._-]|$)/i,
   /\.(?:key|pem|p12|pfx|jks|keystore|sqlite|sqlite3|db|db-wal|db-shm)$/i
 ];
-const protectedDevPrefixes = [
+/**
+ * Files/prefixes the connector will never write to, even inside the approved dev root — this is
+ * the mechanism preventing an agent from patching its own governance surface. Also reused
+ * directly by governance/gamma.ts (isProtectedTarget) so a structured proposal is denied at the
+ * envelope layer before it ever reaches PathGuard, not just when PathGuard happens to be invoked.
+ */
+export const PROTECTED_DEV_PREFIXES = [
   ".git/", "config/", "scripts/", "src/audit/", "src/config/", "src/connector/", "src/policy/",
+  "src/governance/", "src/srm/",
   "src/schema/audit.ts", "src/server.ts", "package.json", "package-lock.json", "tsconfig.json", ".env", ".gitignore"
 ];
+
+export function isProtectedDevPath(normalizedRelativePath: string): boolean {
+  return PROTECTED_DEV_PREFIXES.some(
+    (prefix) => normalizedRelativePath === prefix.replace(/\/$/, "") || normalizedRelativePath.startsWith(prefix)
+  );
+}
 
 export type GuardedPath = {
   root: ConnectorRoot;
@@ -88,7 +101,7 @@ export class PathGuard {
     if (parsed.relativePath === "") throw new ConnectorError("write_target_invalid", "A file target is required.", "INVALID");
     assertAllowedSegments(parsed.relativePath);
     const normalized = parsed.relativePath.replace(/^\.\//, "");
-    if (protectedDevPrefixes.some((prefix) => normalized === prefix.replace(/\/$/, "") || normalized.startsWith(prefix))) {
+    if (isProtectedDevPath(normalized)) {
       throw new ConnectorError("control_plane_write_denied", "Connector and governance control-plane files are protected.");
     }
     const rootRealPath = await realpath(root.path);

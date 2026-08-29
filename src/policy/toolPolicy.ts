@@ -47,7 +47,10 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   nyxa_git_diff: readPolicy("nyxa_git_diff"),
   nyxa_logs: readPolicy("nyxa_logs"),
   nyxa_run_test: devPolicy("nyxa_run_test", "low"),
-  nyxa_apply_patch: devPolicy("nyxa_apply_patch", "medium")
+  nyxa_apply_patch: devPolicy("nyxa_apply_patch", "medium"),
+  // Proposing is always safe (I0) — only the underlying action, once ALLOWed by gamma, carries
+  // real risk, and that action is checked against its OWN ToolPolicy, not this one.
+  nyxa_propose_action: readPolicy("nyxa_propose_action")
 };
 
 function readPolicy(toolName: string): ToolPolicy {
