@@ -38,7 +38,7 @@ export type GuardedPath = {
   relativePath: string;
 };
 
-function splitVirtualPath(value: string): { rootId: string; relativePath: string } {
+export function splitVirtualPath(value: string): { rootId: string; relativePath: string } {
   if (value.includes("\0") || value.includes("\\")) throw new ConnectorError("path_invalid", "Path is invalid.", "INVALID");
   const match = /^([a-z][a-z0-9_-]{0,63}):\/(.*)$/i.exec(value);
   if (!match) throw new ConnectorError("path_invalid", "Use root-id:/relative/path.", "INVALID");

@@ -2,7 +2,9 @@ import type { NyxaAgentMode } from "../policy/modes.js";
 import { modeSatisfiesMinimum } from "../policy/modes.js";
 import type { ToolPolicy } from "../policy/toolPolicy.js";
 import type { CapabilityClass } from "../connector/types.js";
-import { isProtectedDevPath } from "../connector/pathGuard.js";
+import { isProtectedDevPath, splitVirtualPath } from "../connector/pathGuard.js";
+import { ConnectorError } from "../connector/errors.js";
+import { posix } from "node:path";
 import type { ValidatedProposal } from "./proposal.js";
 
 export type GammaOutcome = "ALLOW" | "DENY" | "ESCALATE" | "DEGRADE" | "UNKNOWN";
@@ -49,8 +51,25 @@ function escalate(domain: GammaDomain, reason: string): GammaDecision {
  * across heterogeneous tools, so we protect the governance surface conservatively at this layer.
  */
 function isProtectedTarget(target: string): boolean {
-  const normalized = target.replace(/^[a-z][a-z0-9_-]*:\//i, "");
-  return isProtectedDevPath(normalized);
+  // Reuse PathGuard's own logical-namespace parser rather than a second, divergent
+  // normalization. Not every proposal.target is path-shaped (e.g. nyxa_run_test's
+  // target is a testTargets[] id, not a root-id:/path) -- splitVirtualPath throwing
+  // "path_invalid" just means "this was never a virtual path", so fall through as
+  // not-protected, matching this check's original lenient pass-through for such
+  // targets. splitVirtualPath throwing "path_traversal_denied" is the genuinely
+  // suspicious case (it DID look like root-id:/... but contains ".." or is
+  // absolute) -- that is a real attack attempt against a resource this check exists
+  // to guard, so it fails closed (protected/denied), not silently falls through. For
+  // targets that parse cleanly, posix.normalize collapses "./" and repeated
+  // separators -- pure string canonicalization, no fs access, no premature mapping
+  // onto a real OS path (that mapping stays inside PathGuard).
+  let relativePath: string;
+  try {
+    ({ relativePath } = splitVirtualPath(target));
+  } catch (error) {
+    return error instanceof ConnectorError && error.code === "path_traversal_denied";
+  }
+  return isProtectedDevPath(posix.normalize(relativePath));
 }
 
 /**

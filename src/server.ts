@@ -587,19 +587,44 @@ export class NyxaGovernedMemoryServer {
    * gamma, but execution returns a clear "not yet supported" error rather than guessing extra
    * arguments from a single target field. Call the direct tool for those in v1.
    */
+  /**
+   * Shared execution boundary for the four proposal-dispatchable connector reads. Reuses the
+   * SAME RateLimiter instance (this.rateLimiter) runConnectorTool gates the direct nyxa_* tools
+   * with -- one shared quota pool, not a second independent limiter -- so a flood of
+   * nyxa_propose_action calls cannot reach connector execution at a higher effective rate than
+   * an equivalent flood of direct tool calls could. Failure code/message/outcome intentionally
+   * match runConnectorTool's rate_limited response exactly (see asConnectorError below), so both
+   * paths produce the same shape when they hit the same limit.
+   */
+  private async executeConnectorProposal(
+    action: "nyxa_read_file" | "nyxa_list" | "nyxa_git_status" | "nyxa_run_test",
+    target: string
+  ): Promise<ToolResultPayload> {
+    if (!this.rateLimiter.take()) {
+      throw new ConnectorError("rate_limited", "Rate limit exceeded.", "DENIED");
+    }
+    switch (action) {
+      case "nyxa_read_file":
+        return await this.connector.readFile(target);
+      case "nyxa_list":
+        return await this.connector.list(target);
+      case "nyxa_git_status":
+        return await this.connector.gitStatus(target);
+      case "nyxa_run_test":
+        return await this.connector.runTest(target);
+    }
+  }
+
   private async executeAllowedProposal(
     proposal: ValidatedProposal,
     decision: GammaDecision
   ): Promise<ToolResultPayload> {
     switch (proposal.action) {
       case "nyxa_read_file":
-        return await this.connector.readFile(proposal.target);
       case "nyxa_list":
-        return await this.connector.list(proposal.target);
       case "nyxa_git_status":
-        return await this.connector.gitStatus(proposal.target);
       case "nyxa_run_test":
-        return await this.connector.runTest(proposal.target);
+        return await this.executeConnectorProposal(proposal.action, proposal.target);
       case "nyxa_self_model_write_identity":
       case "nyxa_self_model_write_personality":
       case "nyxa_self_model_write_self_model":
