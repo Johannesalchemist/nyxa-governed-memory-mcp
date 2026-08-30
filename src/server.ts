@@ -332,11 +332,28 @@ function mapGammaOutcomeToAuditDecision(outcome: GammaOutcome): PolicyOutcome {
  * This only reads a field that already exists on the payload -- it does not compute anything
  * new. Self-model write results (`{written: "..."}`) and error payloads have no such field, so
  * this correctly returns undefined for them rather than fabricating one.
+ *
+ * Requires the real ConnectorEvidence shape (not just "has a key called evidence"). Caught by
+ * the pre-deploy reproducibility gate: evidence.latest/evidence.trace's own result object has a
+ * top-level `entries` field (see tools/evidence.view.ts), but an earlier, looser version of this
+ * guard treated ANY object-valued `evidence` key as real evidence -- which would have made a
+ * naming collision elsewhere self-pollute the audit log with malformed, non-ConnectorEvidence
+ * "evidence". This guard checks the actual required fields instead of trusting the key name.
  */
 function extractEvidence(payload: unknown): ConnectorEvidence | undefined {
-  if (payload && typeof payload === "object" && "evidence" in payload) {
-    const evidence = (payload as { evidence: unknown }).evidence;
-    if (evidence && typeof evidence === "object") return evidence as ConnectorEvidence;
+  if (!payload || typeof payload !== "object" || !("evidence" in payload)) return undefined;
+  const evidence = (payload as { evidence: unknown }).evidence;
+  if (
+    evidence &&
+    typeof evidence === "object" &&
+    !Array.isArray(evidence) &&
+    typeof (evidence as Record<string, unknown>)["claim"] === "string" &&
+    typeof (evidence as Record<string, unknown>)["implementation"] === "string" &&
+    typeof (evidence as Record<string, unknown>)["status"] === "string" &&
+    typeof (evidence as Record<string, unknown>)["trust"] === "string" &&
+    Array.isArray((evidence as Record<string, unknown>)["observations"])
+  ) {
+    return evidence as ConnectorEvidence;
   }
   return undefined;
 }

@@ -105,8 +105,17 @@ test("evidence view only includes events that actually carry an evidence object,
   ];
   const view = buildEvidenceView(events, 10);
   assert.equal(view.matched, 1);
-  assert.equal(view.evidence[0].evidence.status, "SUPPORTED");
-  assert.deepEqual(view.evidence[0].evidence.observations, [], "evidence must never carry raw file/search content");
+  assert.equal(view.entries[0].evidence.status, "SUPPORTED");
+  assert.deepEqual(view.entries[0].evidence.observations, [], "evidence must never carry raw file/search content");
+});
+
+test("extractEvidence-equivalent shape check: a payload whose own top-level field happens to be called 'evidence' but is not a real ConnectorEvidence object must not be mistaken for one (regression for the self-pollution bug caught by the pre-deploy reproducibility gate)", () => {
+  // buildEvidenceView's own result never uses the key `evidence` at the top level anymore --
+  // this test locks that shape in place, since server.ts's extractEvidence() relies on it plus
+  // its own structural check as defense in depth.
+  const view = buildEvidenceView([], 10);
+  assert.ok(!("evidence" in view), "the view's own result must not expose a top-level `evidence` key");
+  assert.ok("entries" in view);
 });
 
 test("memory.status reuses backend.health() and audit integrity verbatim, reports candidates as not_implemented", async () => {
@@ -252,18 +261,24 @@ test("evidence and gamma decisions are persisted end-to-end for a real connector
   const readResult = parse(await client.callTool({ name: "nyxa_read_file", arguments: { path: "readroot:/hello.txt" } }));
   assert.equal(readResult.data.text, "hello world");
   const evidenceAfterRead = parse(await client.callTool({ name: "evidence.latest", arguments: {} }));
-  const readEvidenceEntry = evidenceAfterRead.evidence.find((e) => e.tool === "nyxa_read_file");
+  const readEvidenceEntry = evidenceAfterRead.entries.find((e) => e.tool === "nyxa_read_file");
   assert.ok(readEvidenceEntry, "successful read must produce a persisted evidence entry");
   assert.equal(readEvidenceEntry.evidence.trust, "VERIFIED_SOURCE");
   assert.deepEqual(readEvidenceEntry.evidence.observations, []);
   assert.equal(JSON.stringify(readEvidenceEntry).includes("hello world"), false, "evidence metadata must never embed actual file content");
 
-  // 2) A BLOCKED call (path outside any approved root) must NOT contribute an evidence entry.
+  // 2a) evidence.latest's own audit event must not itself be mistaken for evidence: it must not
+  //     recursively pollute the evidence view with its own past output (the top-level result key
+  //     is `entries`, not `evidence`, precisely to prevent this).
+  const evidenceEntryForEvidenceLatestItself = evidenceAfterRead.entries.find((e) => e.tool === "evidence.latest");
+  assert.equal(evidenceEntryForEvidenceLatestItself, undefined, "evidence.latest must never appear as its own evidence source");
+
+  // 2b) A BLOCKED call (path outside any approved root) must NOT contribute an evidence entry.
   const blocked = parse(await client.callTool({ name: "nyxa_read_file", arguments: { path: "readroot:/../../etc/passwd" } }));
   assert.notEqual(blocked.error, undefined);
   const evidenceAfterBlocked = parse(await client.callTool({ name: "evidence.latest", arguments: {} }));
   assert.equal(
-    evidenceAfterBlocked.evidence.some((e) => JSON.stringify(e).includes("passwd")),
+    evidenceAfterBlocked.entries.some((e) => JSON.stringify(e).includes("passwd")),
     false,
     "a blocked/denied call must never produce or leak an evidence entry"
   );

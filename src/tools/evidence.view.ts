@@ -17,7 +17,13 @@ export function buildEvidenceView(events: AuditEvent[], limit: number) {
   }));
   const selected = projected.slice(-limit);
   return {
-    evidence: selected,
+    // Deliberately NOT named `evidence` at this top level: this tool's own result would
+    // otherwise be structurally mistaken for a real ConnectorResult.evidence object by
+    // server.ts's extractEvidence() when THIS call's own audit event is written, causing
+    // evidence.latest/evidence.trace to recursively pollute themselves with their own past
+    // output. `entries` avoids the collision at the source; extractEvidence() is additionally
+    // hardened to require the real ConnectorEvidence shape as defense in depth.
+    entries: selected,
     returned: selected.length,
     matched: projected.length,
     scanned: events.length,
