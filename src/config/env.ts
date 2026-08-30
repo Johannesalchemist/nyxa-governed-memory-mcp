@@ -3,6 +3,7 @@ import { isNyxaAgentMode, type NyxaAgentMode } from "../policy/modes.js";
 import type { MemoryBackendType } from "../backend/MemoryBackend.js";
 import { loadConnectorConfig } from "../connector/config.js";
 import type { ConnectorConfig } from "../connector/types.js";
+import { resolveToolProfile, type ResolvedToolProfile } from "../policy/toolProfile.js";
 
 function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined || value.trim() === "") {
@@ -71,6 +72,9 @@ export type NyxaConfig = {
     token: string;
   };
   connector: ConnectorConfig;
+  /** Per-consumer tool discovery/invocation restriction. See policy/toolProfile.ts. Read once
+   *  here from NYXA_MCP_TOOL_PROFILE; nothing else in this codebase ever sets or mutates it. */
+  toolProfile: ResolvedToolProfile;
 };
 
 export function loadConfig(): NyxaConfig {
@@ -106,6 +110,7 @@ export function loadConfig(): NyxaConfig {
       url: process.env.NYXA_REMOTE_MEMORY_URL ?? "",
       token: process.env.NYXA_REMOTE_MEMORY_TOKEN ?? ""
     },
-    connector: loadConnectorConfig(process.env.NYXA_CONNECTOR_CONFIG)
+    connector: loadConnectorConfig(process.env.NYXA_CONNECTOR_CONFIG),
+    toolProfile: resolveToolProfile(process.env.NYXA_MCP_TOOL_PROFILE)
   };
 }

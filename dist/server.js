@@ -26,6 +26,7 @@ import { buildGammaDecisions } from "./tools/gamma.decisions.js";
 import { buildCapabilityGateTrace } from "./tools/capability_gate.trace.js";
 import { buildEvidenceView } from "./tools/evidence.view.js";
 import { buildMemoryStatus } from "./tools/memory.status.js";
+import { isToolAllowedByProfile } from "./policy/toolProfile.js";
 import { IdentityRecordSchema, PersonalityRecordSchema, SelfModelRecordSchema, CurrentStateSnapshotSchema, BeliefRecordSchema, CapabilityLimitationRecordSchema, GoalRecordSchema, AutobiographicalEventSchema, SELF_MODEL_DOMAINS } from "./self-model/types.js";
 const READ_ANNOTATIONS = {
     readOnlyHint: true,
@@ -371,12 +372,25 @@ export class NyxaGovernedMemoryServer {
         return new RemoteBackendStub(config.memoryBackend);
     }
     registerHandlers() {
-        this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-            tools: [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...OBSERVABILITY_TOOLS]
-        }));
+        this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+            const allTools = [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...OBSERVABILITY_TOOLS];
+            const profile = this.config.toolProfile;
+            return { tools: profile.active ? allTools.filter((tool) => profile.allowed.has(tool.name)) : allTools };
+        });
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const name = request.params.name;
             const input = inputObject(request.params.arguments);
+            // Consumer tool profile gate: evaluated before ANY dispatch branch below, for every tool
+            // name including ones that exist but are outside the active profile's allowlist. Denied
+            // exactly like a genuinely unknown tool (same McpError, same MethodNotFound code) so a
+            // caller cannot distinguish "this tool doesn't exist" from "this tool exists but is hidden
+            // from you" -- no capability or architecture disclosure leaks through the denial itself.
+            // Read once from this.config.toolProfile (set at process construction from
+            // NYXA_MCP_TOOL_PROFILE only) -- nothing in `input` can reach or alter it.
+            if (!isToolAllowedByProfile(this.config.toolProfile, name)) {
+                await this.auditProfileDenied(name);
+                throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+            }
             if (name === "system.status") {
                 assertKeys(input, []);
                 return await this.runLegacyTool(name, {}, async () => ({
@@ -811,6 +825,17 @@ export class NyxaGovernedMemoryServer {
             ...(details ? { details } : {}),
             ...(evidence ? { evidence } : {})
         });
+    }
+    /**
+     * Reuses the existing generic-unknown-tool audit shape (same fields, capability_class "I3",
+     * policy_decision "UNKNOWN") -- a profile-denied tool is audited identically to a genuinely
+     * unknown one, matching the identical McpError response the caller receives.
+     */
+    async auditProfileDenied(toolName) {
+        const started = performance.now();
+        const requestHash = hashPayload({});
+        const profile = this.config.toolProfile;
+        await this.auditConnector("blocked", toolName, "I3", "UNKNOWN", requestHash, toolName, started, "tool_profile_denied", { code: "tool_profile_denied", profile: profile.active ? profile.name : "none" });
     }
     async auditGovernance(result, capability, decision, started, resultStatus, affectedResource, gamma, evidence) {
         await this.auditLog.append({
