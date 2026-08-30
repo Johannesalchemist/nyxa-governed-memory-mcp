@@ -21,13 +21,19 @@ import { hashPayload } from "./core/auditEvent.js";
 import { SecureConnector } from "./connector/SecureConnector.js";
 import { asConnectorError, ConnectorError } from "./connector/errors.js";
 import { RateLimiter } from "./connector/rateLimiter.js";
-import type { CapabilityClass, PolicyOutcome } from "./connector/types.js";
+import type { CapabilityClass, ConnectorEvidence, PolicyOutcome } from "./connector/types.js";
 import { buildSystemStatus } from "./tools/system.status.js";
 import { buildPolicyMode } from "./tools/policy.mode.js";
 import { buildAuditTrace, normalizeAuditTraceLimit } from "./tools/audit.trace.js";
 import { parseProposal, ProposalValidationError, type ValidatedProposal } from "./governance/proposal.js";
-import { evaluateProposal, type GammaOutcome, type GammaDecision } from "./governance/gamma.js";
+import { evaluateProposal, type GammaOutcome, type GammaDomain, type GammaDecision } from "./governance/gamma.js";
 import { SelfModelStore } from "./self-model/store.js";
+import { buildGovernanceStatus } from "./tools/governance.status.js";
+import { buildGovernanceTrace } from "./tools/governance.trace.js";
+import { buildGammaDecisions } from "./tools/gamma.decisions.js";
+import { buildCapabilityGateTrace } from "./tools/capability_gate.trace.js";
+import { buildEvidenceView } from "./tools/evidence.view.js";
+import { buildMemoryStatus } from "./tools/memory.status.js";
 import {
   IdentityRecordSchema,
   PersonalityRecordSchema,
@@ -165,6 +171,61 @@ const SELF_MODEL_TOOLS = [
   }
 ] as const;
 
+// Phase 1 observability extension: read-only filtered views over data this MCP already
+// produces. No new roots, no new execution/network/write capability, no alternate governance
+// path -- every one of these is a projection of TOOL_POLICIES, the existing gamma decisions,
+// the capability_class/policy_decision audit fields, ConnectorResult.evidence, and
+// LocalBackend.health(), all already computed today.
+const OBSERVABILITY_TOOLS = [
+  {
+    name: "governance.status",
+    description:
+      "Reports exactly which governance mechanisms exist in this MCP's own process (the gamma " +
+      "decision engine's real C1-C5 checks, advisory alpha/beta fields, the functional " +
+      "capability gate). Explicitly reports unimplemented concepts (e.g. E0) as not_implemented " +
+      "rather than inventing them. Does not describe Room/persona-level governance elsewhere on " +
+      "this host -- that is a separate, unobserved system.",
+    inputSchema: objectSchema({}),
+    annotations: READ_ANNOTATIONS
+  },
+  {
+    name: "governance.trace",
+    description: "Filtered view of the existing audit log: full audit records for nyxa_propose_action calls only.",
+    inputSchema: objectSchema({ limit: integerSchema(1, 100) }),
+    annotations: READ_ANNOTATIONS
+  },
+  {
+    name: "gamma.decisions",
+    description: "Filtered view of the existing audit log projecting only the real gamma outcome/domain/reason for nyxa_propose_action calls.",
+    inputSchema: objectSchema({ limit: integerSchema(1, 100) }),
+    annotations: READ_ANNOTATIONS
+  },
+  {
+    name: "capability_gate.trace",
+    description: "Filtered view of the existing audit log: capability_class/policy_decision for every tool call that carries one, across all tools.",
+    inputSchema: objectSchema({ limit: integerSchema(1, 100) }),
+    annotations: READ_ANNOTATIONS
+  },
+  {
+    name: "evidence.latest",
+    description: "Most recent ConnectorResult.evidence objects persisted to the audit log (small default window).",
+    inputSchema: objectSchema({ limit: integerSchema(1, 50) }),
+    annotations: READ_ANNOTATIONS
+  },
+  {
+    name: "evidence.trace",
+    description: "Same evidence projection as evidence.latest with a larger allowed window, for broader review.",
+    inputSchema: objectSchema({ limit: integerSchema(1, 100) }),
+    annotations: READ_ANNOTATIONS
+  },
+  {
+    name: "memory.status",
+    description: "Backend health (LocalBackend.health()) plus audit-log integrity/stats. Reports memory-candidate persistence as not_implemented (schema exists, nothing writes to it).",
+    inputSchema: objectSchema({}),
+    annotations: READ_ANNOTATIONS
+  }
+] as const;
+
 const LEGACY_TOOLS = [
   {
     name: "system.status",
@@ -265,6 +326,21 @@ function mapGammaOutcomeToAuditDecision(outcome: GammaOutcome): PolicyOutcome {
   }
 }
 
+/**
+ * Every I0/I1 tool already computes a ConnectorResult.evidence object and returns it to the
+ * caller; until this extension it was discarded afterward instead of being persisted anywhere.
+ * This only reads a field that already exists on the payload -- it does not compute anything
+ * new. Self-model write results (`{written: "..."}`) and error payloads have no such field, so
+ * this correctly returns undefined for them rather than fabricating one.
+ */
+function extractEvidence(payload: unknown): ConnectorEvidence | undefined {
+  if (payload && typeof payload === "object" && "evidence" in payload) {
+    const evidence = (payload as { evidence: unknown }).evidence;
+    if (evidence && typeof evidence === "object") return evidence as ConnectorEvidence;
+  }
+  return undefined;
+}
+
 export class NyxaGovernedMemoryServer {
   private readonly config: NyxaConfig;
   private readonly auditLog: AuditLog;
@@ -326,7 +402,7 @@ export class NyxaGovernedMemoryServer {
 
   private registerHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS]
+      tools: [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...OBSERVABILITY_TOOLS]
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -357,6 +433,9 @@ export class NyxaGovernedMemoryServer {
       }
       if (CONNECTOR_TOOLS.some((tool) => tool.name === name)) {
         return await this.dispatchConnectorTool(name, input);
+      }
+      if (OBSERVABILITY_TOOLS.some((tool) => tool.name === name)) {
+        return await this.dispatchObservabilityTool(name, input);
       }
 
       const started = performance.now();
@@ -427,6 +506,54 @@ export class NyxaGovernedMemoryServer {
   }
 
   /**
+   * Phase 1 observability extension. Routed through the SAME runConnectorTool gate the 9
+   * pre-existing nyxa_* tools use -- same rate-limit pool, same capability_class/policy_decision
+   * audit fields, same fail-closed behavior on an unmet mode floor. These tools only ever read
+   * from this.auditLog / TOOL_POLICIES / this.backend; none of them touch the filesystem outside
+   * the audit log this MCP already owns, so no new connector root or trust boundary is involved.
+   */
+  private async dispatchObservabilityTool(name: string, input: Input) {
+    const safeArguments = { request_hash: hashPayload(input) };
+    return await this.runConnectorTool(name, safeArguments, name, async () => {
+      switch (name) {
+        case "governance.status":
+          assertKeys(input, []);
+          return buildGovernanceStatus(this.config);
+        case "governance.trace": {
+          assertKeys(input, ["limit"]);
+          const limit = optionalInteger(input, "limit", 1, 100) ?? 20;
+          return buildGovernanceTrace(await this.auditLog.recent(500), limit);
+        }
+        case "gamma.decisions": {
+          assertKeys(input, ["limit"]);
+          const limit = optionalInteger(input, "limit", 1, 100) ?? 20;
+          return buildGammaDecisions(await this.auditLog.recent(500), limit);
+        }
+        case "capability_gate.trace": {
+          assertKeys(input, ["limit"]);
+          const limit = optionalInteger(input, "limit", 1, 100) ?? 20;
+          return buildCapabilityGateTrace(await this.auditLog.recent(500), limit);
+        }
+        case "evidence.latest": {
+          assertKeys(input, ["limit"]);
+          const limit = optionalInteger(input, "limit", 1, 50) ?? 10;
+          return buildEvidenceView(await this.auditLog.recent(500), limit);
+        }
+        case "evidence.trace": {
+          assertKeys(input, ["limit"]);
+          const limit = optionalInteger(input, "limit", 1, 100) ?? 20;
+          return buildEvidenceView(await this.auditLog.recent(500), limit);
+        }
+        case "memory.status":
+          assertKeys(input, []);
+          return await buildMemoryStatus(this.backend, this.auditLog);
+        default:
+          throw new ConnectorError("unknown_tool", "Unknown tool.", "UNKNOWN");
+      }
+    });
+  }
+
+  /**
    * Governance front door: validates the envelope, runs it through the deterministic gamma
    * decision engine, and only on ALLOW dispatches to the SAME underlying SecureConnector methods
    * the direct nyxa_* tools use (executeAllowedProposal below) — this is not a second executor.
@@ -474,7 +601,8 @@ export class NyxaGovernedMemoryServer {
         auditDecision,
         started,
         `${decision.domain ?? "none"}:${decision.reason}`,
-        affectedResource
+        affectedResource,
+        { outcome: decision.outcome, domain: decision.domain, reason: decision.reason }
       );
       return toolJsonResult(
         {
@@ -489,13 +617,16 @@ export class NyxaGovernedMemoryServer {
 
     try {
       const payload = await this.executeAllowedProposal(proposal, decision);
+      const evidence = extractEvidence(payload);
       await this.auditGovernance(
         "allowed",
         toolPolicy?.capabilityClass,
         "ALLOWED",
         started,
         "success",
-        affectedResource
+        affectedResource,
+        { outcome: decision.outcome, domain: decision.domain, reason: decision.reason },
+        evidence
       );
       return toolJsonResult({ policy_decision: "ALLOW", proposed_action: proposal.action, result: payload });
     } catch (error) {
@@ -506,7 +637,8 @@ export class NyxaGovernedMemoryServer {
         safeError.outcome,
         started,
         safeError.code,
-        affectedResource
+        affectedResource,
+        { outcome: decision.outcome, domain: decision.domain, reason: decision.reason }
       );
       return toolJsonResult(
         { policy_decision: safeError.outcome, error: { code: safeError.code, message: safeError.publicMessage } },
@@ -782,7 +914,11 @@ export class NyxaGovernedMemoryServer {
     }
     try {
       const payload = await action();
-      await this.auditConnector("allowed", toolName, capability, "ALLOWED", argumentsHash, affectedResource, started, "success");
+      const evidence = extractEvidence(payload);
+      await this.auditConnector(
+        "allowed", toolName, capability, "ALLOWED", argumentsHash, affectedResource, started, "success",
+        undefined, evidence
+      );
       return toolJsonResult(payload);
     } catch (error) {
       const safeError = asConnectorError(error);
@@ -809,7 +945,8 @@ export class NyxaGovernedMemoryServer {
     affectedResource: string,
     started: number,
     resultStatus: string,
-    details?: Record<string, unknown>
+    details?: Record<string, unknown>,
+    evidence?: ConnectorEvidence
   ): Promise<void> {
     await this.auditLog.append({
       id: randomUUID(),
@@ -827,7 +964,8 @@ export class NyxaGovernedMemoryServer {
       duration_ms: Math.max(0, Math.round(performance.now() - started)),
       result_status: resultStatus,
       requesting_identity: "unavailable:stdio",
-      ...(details ? { details } : {})
+      ...(details ? { details } : {}),
+      ...(evidence ? { evidence } : {})
     });
   }
 
@@ -837,7 +975,9 @@ export class NyxaGovernedMemoryServer {
     decision: PolicyOutcome,
     started: number,
     resultStatus: string,
-    affectedResource: string
+    affectedResource: string,
+    gamma?: { outcome: GammaOutcome; domain: GammaDomain; reason: string },
+    evidence?: ConnectorEvidence
   ): Promise<void> {
     await this.auditLog.append({
       id: randomUUID(),
@@ -853,7 +993,9 @@ export class NyxaGovernedMemoryServer {
       affected_resource: affectedResource,
       duration_ms: Math.max(0, Math.round(performance.now() - started)),
       result_status: resultStatus,
-      requesting_identity: "unavailable:stdio"
+      requesting_identity: "unavailable:stdio",
+      ...(gamma ? { gamma_outcome: gamma.outcome, gamma_domain: gamma.domain, gamma_reason: gamma.reason } : {}),
+      ...(evidence ? { evidence } : {})
     });
   }
 

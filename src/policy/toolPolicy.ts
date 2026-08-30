@@ -74,7 +74,19 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   nyxa_self_model_write_autobiographical_event: selfModelWritePolicy(
     "nyxa_self_model_write_autobiographical_event",
     "I1"
-  )
+  ),
+
+  // Phase 1 observability extension: read-only filtered views over data this MCP already
+  // produces (TOOL_POLICIES itself, gamma decisions, capability-class/policy-decision audit
+  // fields, ConnectorResult.evidence, LocalBackend.health()). All I0, observe_only, no new
+  // authority -- identical treatment to the pre-existing nyxa_* read tools.
+  "governance.status": readPolicy("governance.status"),
+  "governance.trace": readPolicy("governance.trace"),
+  "gamma.decisions": readPolicy("gamma.decisions"),
+  "capability_gate.trace": readPolicy("capability_gate.trace"),
+  "evidence.latest": readPolicy("evidence.latest"),
+  "evidence.trace": readPolicy("evidence.trace"),
+  "memory.status": readPolicy("memory.status")
 };
 
 function selfModelWritePolicy(toolName: string, capabilityClass: CapabilityClass): ToolPolicy {
