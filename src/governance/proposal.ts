@@ -39,7 +39,14 @@ export const ProposalSchema = z
     // proposal or test that omits it is affected. Each dispatch case in server.ts decides for
     // itself how to interpret this — gamma never reads it, matching the treatment of
     // rationale/opposition.
-    payload: z.record(z.string(), z.unknown()).optional()
+    payload: z.record(z.string(), z.unknown()).optional(),
+    // C0 target-safety (governance/c0.ts): the proposer's optional, self-declared claim about
+    // which server this proposal is meant for. Verified against /etc/server-identity.json
+    // BEFORE gamma's C1-C5 ever run — see server.ts's handleProposeAction. Optional and
+    // additive: a proposal that omits it passes C0 in compatibility mode (see c0.ts), so no
+    // existing caller/test that doesn't set it is affected. Gamma itself never reads this
+    // field, matching the treatment of rationale/opposition/payload above.
+    expected_target: z.string().min(1).max(200).optional()
   })
   .strict();
 

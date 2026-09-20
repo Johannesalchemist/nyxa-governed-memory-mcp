@@ -27,7 +27,13 @@ const targetSchema = z.object({
   cwd: absolutePath,
   timeoutMs: z.number().int().min(100).max(300_000),
   trust: z.enum(["VERIFIED_SOURCE", "UNVERIFIED_SOURCE"]),
-  integrityFiles: z.array(z.object({ path: absolutePath, sha256 }).strict()).max(30)
+  integrityFiles: z.array(z.object({ path: absolutePath, sha256 }).strict()).max(30),
+  // Explicit, operator-configured per-target sandbox capabilities. Never derived
+  // from a remote proposer's request -- these come only from the reviewed config file.
+  network: z.boolean().default(false),
+  memoryLimitKb: z.number().int().min(1_048_576).max(8_388_608).default(2_097_152),
+  nprocLimit: z.number().int().min(8).max(256).default(64),
+  scratchSizeKb: z.number().int().min(1_024).max(1_048_576).default(65_536)
 }).strict();
 const configSchema = z.object({
   enabled: z.boolean(),

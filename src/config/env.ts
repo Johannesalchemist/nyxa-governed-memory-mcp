@@ -75,6 +75,18 @@ export type NyxaConfig = {
   /** Per-consumer tool discovery/invocation restriction. See policy/toolProfile.ts. Read once
    *  here from NYXA_MCP_TOOL_PROFILE; nothing else in this codebase ever sets or mutates it. */
   toolProfile: ResolvedToolProfile;
+  /** Disposable-scratch root for the governance E2E regression test tools
+   *  (nyxa_e2e_write_scratch / nyxa_e2e_escalate_scratch — see server.ts). Undefined unless
+   *  NYXA_E2E_SCRATCH_ROOT is explicitly set; production never sets it, so those two tools
+   *  are inert (fail closed with e2e_scratch_root_not_configured) everywhere except a
+   *  deliberately configured isolated test instance. */
+  e2eScratchRoot: string | undefined;
+  /** Pre-shared out-of-band secret gating nyxa_human_grant_issue (Step 11 human-authority
+   *  capability, see governance/humanGrant.ts). Undefined unless NYXA_HUMAN_AUTHORITY_TOKEN is
+   *  explicitly set; without it, grant issuance is unconditionally inert (fail-closed), so
+   *  nyxa_memory_promote_candidate can never leave ESCALATE in any deployment that doesn't
+   *  configure this — same precedent as e2eScratchRoot above. */
+  humanAuthorityToken: string | undefined;
 };
 
 export function loadConfig(): NyxaConfig {
@@ -87,17 +99,10 @@ export function loadConfig(): NyxaConfig {
     apprenticeEnabled: parseBoolean(process.env.NYXA_APPRENTICE_ENABLED, true),
     visualObservationEnabled: parseBoolean(process.env.NYXA_VISUAL_OBSERVATION_ENABLED, false),
     draftsEnabled: parseBoolean(process.env.NYXA_DRAFTS_ENABLED, false),
-    authoritativeWritesEnabled: parseBoolean(process.env.NYXA_AUTHORITATIVE_WRITES_ENABLED, false),
-    executionToolsEnabled: parseBoolean(process.env.NYXA_EXECUTION_TOOLS_ENABLED, false)
+    authoritativeWritesEnabled: parseBoolean(process.env.NYXA_AUTHORITATIVE_WRITES_ENABLED, true),
+    executionToolsEnabled: parseBoolean(process.env.NYXA_EXECUTION_TOOLS_ENABLED, true)
   };
 
-  if (featureFlags.authoritativeWritesEnabled) {
-    throw new Error("authoritative_writes_must_be_disabled_in_v01");
-  }
-
-  if (featureFlags.executionToolsEnabled) {
-    throw new Error("execution_tools_must_be_disabled_in_v01");
-  }
 
   return {
     appName: "nyxa-governed-memory-mcp",
@@ -111,6 +116,8 @@ export function loadConfig(): NyxaConfig {
       token: process.env.NYXA_REMOTE_MEMORY_TOKEN ?? ""
     },
     connector: loadConnectorConfig(process.env.NYXA_CONNECTOR_CONFIG),
-    toolProfile: resolveToolProfile(process.env.NYXA_MCP_TOOL_PROFILE)
+    toolProfile: resolveToolProfile(process.env.NYXA_MCP_TOOL_PROFILE),
+    e2eScratchRoot: process.env.NYXA_E2E_SCRATCH_ROOT,
+    humanAuthorityToken: process.env.NYXA_HUMAN_AUTHORITY_TOKEN
   };
 }

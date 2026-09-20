@@ -1,0 +1,366 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { buildGovernanceStatus } from "../dist/tools/governance.status.js";
+import { buildGovernanceTrace } from "../dist/tools/governance.trace.js";
+import { buildGammaDecisions } from "../dist/tools/gamma.decisions.js";
+import { buildCapabilityGateTrace } from "../dist/tools/capability_gate.trace.js";
+import { buildEvidenceView } from "../dist/tools/evidence.view.js";
+import { buildMemoryStatus } from "../dist/tools/memory.status.js";
+
+// ---------------------------------------------------------------------------
+// Part A: pure projection/filter functions against synthetic audit events.
+// No process spawn -- fast, precise unit coverage of the filtering logic
+// itself, independent of transport/dispatch correctness (covered in Part B).
+// ---------------------------------------------------------------------------
+
+function ev(overrides = {}) {
+  return {
+    id: "id-" + Math.random().toString(36).slice(2),
+    timestamp: "2026-08-30T00:00:00.000Z",
+    actor: "mcp",
+    action: "tool.call",
+    mode: "observe_only",
+    backend: "local",
+    result: "allowed",
+    ...overrides
+  };
+}
+
+test("governance.status reports implemented E0 and distributed capability enforcement", () => {
+  const status = buildGovernanceStatus({ agentMode: "observe_only" });
+  const e0 = status.gamma_engine.checks_in_order.find((c) => c.domain === "E0");
+  assert.ok(e0, "E0 must be explicitly reported, not silently omitted");
+  assert.match(e0.description, /implemented.*epistemic/);
+  const c1to5 = status.gamma_engine.checks_in_order.filter((c) => /^C[1-5]$/.test(c.domain));
+  assert.equal(c1to5.length, 5, "exactly C1-C5 must be reported as real, no more no less");
+  assert.match(status.capability_gate.as_named_module, /distributed/);
+  assert.match(status.scope, /Room|persona/i, "must disclose it does not observe the separate Room/persona governance system");
+});
+
+test("governance.trace filters strictly to nyxa_propose_action and respects limit/truncation", () => {
+  const events = [
+    ev({ tool: "nyxa_propose_action", timestamp: "t1" }),
+    ev({ tool: "nyxa_list", timestamp: "t2" }),
+    ev({ tool: "nyxa_propose_action", timestamp: "t3" }),
+    ev({ tool: "nyxa_propose_action", timestamp: "t4" })
+  ];
+  const view = buildGovernanceTrace(events, 2);
+  assert.equal(view.matched, 3);
+  assert.equal(view.returned, 2);
+  assert.equal(view.truncated, true);
+  assert.deepEqual(view.events.map((e) => e.timestamp), ["t3", "t4"]);
+  assert.ok(view.events.every((e) => e.tool === "nyxa_propose_action"));
+});
+
+test("gamma.decisions projects only decision fields and reports null (not fabricated) for pre-upgrade entries", () => {
+  const events = [
+    ev({ tool: "nyxa_propose_action", timestamp: "old", result: "blocked" }), // no gamma_* fields at all
+    ev({
+      tool: "nyxa_propose_action",
+      timestamp: "new",
+      gamma_outcome: "DENY",
+      gamma_domain: "C3",
+      gamma_reason: "irreversibility_underestimated",
+      capability_class: "I1"
+    }),
+    ev({ tool: "nyxa_list", timestamp: "unrelated" })
+  ];
+  const view = buildGammaDecisions(events, 10);
+  assert.equal(view.matched, 2);
+  assert.deepEqual(view.decisions[0], {
+    timestamp: "old",
+    outcome: null,
+    domain: null,
+    reason: null,
+    capability_class: null,
+    affected_resource: null,
+    result: "blocked"
+  });
+  assert.equal(view.decisions[1].outcome, "DENY");
+  assert.equal(view.decisions[1].domain, "C3");
+});
+
+test("capability_gate.trace includes every tool that carries a capability_class, across tool families", () => {
+  const events = [
+    ev({ tool: "nyxa_list", capability_class: "I0", policy_decision: "ALLOWED" }),
+    ev({ tool: "nyxa_run_test", capability_class: "I1", policy_decision: "DENIED" }),
+    ev({ tool: "nyxa_self_model_write_identity", capability_class: "I2", policy_decision: "DENIED" }),
+    ev({ tool: "policy.mode" }) // legacy tool audit() call never sets capability_class
+  ];
+  const view = buildCapabilityGateTrace(events, 10);
+  assert.equal(view.matched, 3);
+  assert.ok(!view.decisions.some((d) => d.tool === "policy.mode"));
+  assert.ok(view.decisions.some((d) => d.capability_class === "I2" && d.policy_decision === "DENIED"));
+});
+
+test("evidence view only includes events that actually carry an evidence object, never fabricates one", () => {
+  const events = [
+    ev({ tool: "nyxa_list", evidence: { claim: "c", implementation: "i", status: "SUPPORTED", trust: "VERIFIED_SOURCE", observations: [], gamma: "SUPPORTED" } }),
+    ev({ tool: "nyxa_list", result: "blocked" }) // denied call -- no evidence field
+  ];
+  const view = buildEvidenceView(events, 10);
+  assert.equal(view.matched, 1);
+  assert.equal(view.entries[0].evidence.status, "SUPPORTED");
+  assert.deepEqual(view.entries[0].evidence.observations, [], "evidence must never carry raw file/search content");
+});
+
+test("extractEvidence-equivalent shape check: a payload whose own top-level field happens to be called 'evidence' but is not a real ConnectorEvidence object must not be mistaken for one (regression for the self-pollution bug caught by the pre-deploy reproducibility gate)", () => {
+  // buildEvidenceView's own result never uses the key `evidence` at the top level anymore --
+  // this test locks that shape in place, since server.ts's extractEvidence() relies on it plus
+  // its own structural check as defense in depth.
+  const view = buildEvidenceView([], 10);
+  assert.ok(!("evidence" in view), "the view's own result must not expose a top-level `evidence` key");
+  assert.ok("entries" in view);
+});
+
+test("memory.status reuses backend.health() and audit integrity verbatim, reports implemented candidate persistence", async () => {
+  const fakeBackend = { health: async () => ({ type: "local", status: "ready", detail: "x" }) };
+  const fakeAuditLog = {
+    recent: async () => [{ timestamp: "t1" }],
+    verifyIntegrity: async () => ({ valid: true, checked: 5 })
+  };
+  const status = await buildMemoryStatus(fakeBackend, fakeAuditLog);
+  assert.equal(status.backend.status, "ready");
+  assert.equal(status.audit_log.integrity_valid, true);
+  assert.equal(status.audit_log.latest_event_timestamp, "t1");
+  assert.equal(status.memory_candidates.implemented, true);
+});
+
+// ---------------------------------------------------------------------------
+// Part B: real stdio MCP process, exercising the actual dispatch/audit wiring.
+// ---------------------------------------------------------------------------
+
+const NEW_TOOL_NAMES = [
+  "governance.status",
+  "governance.trace",
+  "gamma.decisions",
+  "capability_gate.trace",
+  "evidence.latest",
+  "evidence.trace",
+  "memory.status"
+];
+
+function parse(result) {
+  const text = result.content?.find((item) => item.type === "text")?.text;
+  return JSON.parse(text);
+}
+
+async function spawnServer({ agentMode, connectorConfigPath } = {}) {
+  const cwd = resolve(".");
+  const dataDir = await mkdtemp(join(tmpdir(), "nyxa-obs-data-"));
+  const transport = new StdioClientTransport({
+    command: "/usr/bin/node",
+    args: ["dist/index.js"],
+    cwd,
+    env: {
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      HOME: cwd,
+      LANG: "C.UTF-8",
+      ...(agentMode ? { NYXA_AGENT_MODE: agentMode } : {}),
+      NYXA_DATA_DIR: dataDir,
+      ...(connectorConfigPath ? { NYXA_CONNECTOR_CONFIG: connectorConfigPath } : {})
+    },
+    stderr: "pipe"
+  });
+  const client = new Client({ name: "nyxa-observability-test", version: "0.1.0" });
+  await client.connect(transport);
+  return { client, dataDir, cwd };
+}
+
+test("all 7 new tools are registered and are I0/observe_only reachable with connector disabled", async (context) => {
+  const { client } = await spawnServer();
+  context.after(async () => client.close());
+
+  const { tools } = await client.listTools();
+  const names = tools.map((t) => t.name);
+  for (const name of NEW_TOOL_NAMES) {
+    assert.ok(names.includes(name), `${name} must be registered`);
+  }
+
+  // governance.status / memory.status must work even though the connector itself is disabled --
+  // they never call SecureConnector, only TOOL_POLICIES / auditLog / backend.
+  const status = parse(await client.callTool({ name: "governance.status", arguments: {} }));
+  assert.equal(status.mode, "observe_only");
+  const mem = parse(await client.callTool({ name: "memory.status", arguments: {} }));
+  assert.equal(mem.backend.status, "ready");
+
+  // Confirm connector really is disabled in this environment (sanity check the test setup).
+  const disabled = parse(await client.callTool({ name: "nyxa_system_status", arguments: {} }));
+  assert.equal(disabled.error?.code, "connector_disabled");
+
+  // Empty-state views must not error and must not fabricate entries.
+  const trace = parse(await client.callTool({ name: "governance.trace", arguments: {} }));
+  assert.equal(trace.matched, 0);
+  const decisions = parse(await client.callTool({ name: "gamma.decisions", arguments: {} }));
+  assert.equal(decisions.matched, 0);
+});
+
+test("adversarial: argument validation on every new tool fails closed (unknown keys, oversized/malformed limits, injected authority-looking fields)", async (context) => {
+  const { client } = await spawnServer();
+  context.after(async () => client.close());
+
+  for (const name of NEW_TOOL_NAMES) {
+    // Unknown key rejected outright, including ones that LOOK like an authority/escalation attempt.
+    for (const badArgs of [{ path: "root:/etc/passwd" }, { mode: "draft" }, { agentMode: "supervised_execute" }, { proposal: {} }, { target: "x" }]) {
+      const r = parse(await client.callTool({ name, arguments: badArgs }));
+      assert.equal(r.error?.code, "arguments_invalid", `${name} must reject unexpected key ${JSON.stringify(badArgs)}`);
+    }
+  }
+
+  // Oversized / malformed limit on the trace-style tools.
+  for (const name of ["governance.trace", "gamma.decisions", "capability_gate.trace", "evidence.trace"]) {
+    const tooBig = parse(await client.callTool({ name, arguments: { limit: 99999 } }));
+    assert.equal(tooBig.error?.code, "arguments_invalid");
+    const wrongType = parse(await client.callTool({ name, arguments: { limit: "10" } }));
+    assert.equal(wrongType.error?.code, "arguments_invalid");
+    const negative = parse(await client.callTool({ name, arguments: { limit: -1 } }));
+    assert.equal(negative.error?.code, "arguments_invalid");
+  }
+  // evidence.latest has a tighter max (50) than the others (100).
+  const overEvidenceLatest = parse(await client.callTool({ name: "evidence.latest", arguments: { limit: 51 } }));
+  assert.equal(overEvidenceLatest.error?.code, "arguments_invalid");
+
+  // governance.status / memory.status take no arguments at all.
+  for (const name of ["governance.status", "memory.status"]) {
+    const withLimit = parse(await client.callTool({ name, arguments: { limit: 1 } }));
+    assert.equal(withLimit.error?.code, "arguments_invalid");
+  }
+});
+
+test("evidence and gamma decisions are persisted end-to-end for a real connector call and a real proposal, without leaking blocked-call content", async (context) => {
+  const cwd = resolve(".");
+  const readRootDir = await mkdtemp(join(tmpdir(), "nyxa-obs-root-"));
+  await writeFile(join(readRootDir, "hello.txt"), "hello world", "utf8");
+  const configDir = await mkdtemp(join(tmpdir(), "nyxa-obs-config-"));
+  const config = {
+    enabled: true,
+    devEnabled: false,
+    gitExecutable: "/usr/bin/git",
+    systemctlExecutable: "/usr/bin/systemctl",
+    roots: [{ id: "readroot", path: readRootDir, access: "read", trust: "VERIFIED_SOURCE" }],
+    repositories: [],
+    services: [],
+    testTargets: [],
+    limits: {
+      maxOutputChars: 50000, maxFileBytes: 1048576, maxSearchResults: 100, maxSearchFiles: 5000,
+      maxDirectoryEntries: 1000, maxPatchBytes: 200000, toolTimeoutMs: 30000, rateLimitPerMinute: 60
+    }
+  };
+  const configPath = join(configDir, "connector.json");
+  await writeFile(configPath, JSON.stringify(config), "utf8");
+
+  const { client } = await spawnServer({ connectorConfigPath: configPath });
+  context.after(async () => client.close());
+
+  // 1) A real successful connector read must show up in evidence.latest with metadata only.
+  const readResult = parse(await client.callTool({ name: "nyxa_read_file", arguments: { path: "readroot:/hello.txt" } }));
+  assert.equal(readResult.data.text, "hello world");
+  const evidenceAfterRead = parse(await client.callTool({ name: "evidence.latest", arguments: {} }));
+  const readEvidenceEntry = evidenceAfterRead.entries.find((e) => e.tool === "nyxa_read_file");
+  assert.ok(readEvidenceEntry, "successful read must produce a persisted evidence entry");
+  assert.equal(readEvidenceEntry.evidence.trust, "VERIFIED_SOURCE");
+  assert.deepEqual(readEvidenceEntry.evidence.observations, []);
+  assert.equal(JSON.stringify(readEvidenceEntry).includes("hello world"), false, "evidence metadata must never embed actual file content");
+
+  // 2a) evidence.latest's own audit event must not itself be mistaken for evidence: it must not
+  //     recursively pollute the evidence view with its own past output (the top-level result key
+  //     is `entries`, not `evidence`, precisely to prevent this).
+  const evidenceEntryForEvidenceLatestItself = evidenceAfterRead.entries.find((e) => e.tool === "evidence.latest");
+  assert.equal(evidenceEntryForEvidenceLatestItself, undefined, "evidence.latest must never appear as its own evidence source");
+
+  // 2b) A BLOCKED call (path outside any approved root) must NOT contribute an evidence entry.
+  const blocked = parse(await client.callTool({ name: "nyxa_read_file", arguments: { path: "readroot:/../../etc/passwd" } }));
+  assert.notEqual(blocked.error, undefined);
+  const evidenceAfterBlocked = parse(await client.callTool({ name: "evidence.latest", arguments: {} }));
+  assert.equal(
+    evidenceAfterBlocked.entries.some((e) => JSON.stringify(e).includes("passwd")),
+    false,
+    "a blocked/denied call must never produce or leak an evidence entry"
+  );
+
+  // 3) A real ALLOWed proposal must show up in both governance.trace and gamma.decisions with the
+  //    real gamma outcome, and its evidence (from the underlying connector read) is also persisted.
+  const allowProposal = {
+    actor: "obs-test", action: "nyxa_read_file", target: "readroot:/hello.txt",
+    scope: "observability regression", claims: [{ tag: "FACT", statement: "file exists", source: "test-setup" }],
+    uncertainty: 0.1, requestedCapabilityClass: "I0", estimatedIrreversibility: "I0",
+    provenance: { taskId: "obs", runId: "allow-1", requestingIdentity: "tester" }
+  };
+  const allow = parse(await client.callTool({ name: "nyxa_propose_action", arguments: { proposal: allowProposal } }));
+  assert.equal(allow.policy_decision, "ALLOW");
+
+  const govTrace = parse(await client.callTool({ name: "governance.trace", arguments: {} }));
+  assert.ok(govTrace.events.some((e) => e.gamma_outcome === "ALLOW"), "the real ALLOW decision must be visible in governance.trace");
+
+  const decisions = parse(await client.callTool({ name: "gamma.decisions", arguments: {} }));
+  const allowDecision = decisions.decisions.find((d) => d.outcome === "ALLOW");
+  assert.ok(allowDecision);
+  assert.equal(allowDecision.domain, null);
+
+  // 4) A real DENIED proposal (unknown tool -> C1 UNKNOWN) must also be visible with its real domain.
+  const denyProposal = { ...allowProposal, action: "nyxa_delete_everything", provenance: { ...allowProposal.provenance, runId: "deny-1" } };
+  const deny = parse(await client.callTool({ name: "nyxa_propose_action", arguments: { proposal: denyProposal } }));
+  assert.equal(deny.policy_decision, "UNKNOWN");
+  const decisionsAfterDeny = parse(await client.callTool({ name: "gamma.decisions", arguments: {} }));
+  assert.ok(decisionsAfterDeny.decisions.some((d) => d.outcome === "UNKNOWN" && d.domain === "C1"));
+
+  // 5) capability_gate.trace must cover both the direct connector call and the proposal-routed one.
+  const gate = parse(await client.callTool({ name: "capability_gate.trace", arguments: {} }));
+  assert.ok(gate.decisions.some((d) => d.tool === "nyxa_read_file" && d.capability_class === "I0"));
+  assert.ok(gate.decisions.some((d) => d.tool === "nyxa_propose_action"));
+
+  // 6) Audit-chain integrity must remain valid after all of the above.
+  const mem = parse(await client.callTool({ name: "memory.status", arguments: {} }));
+  assert.equal(mem.audit_log.integrity_valid, true);
+});
+
+test("observe_only cannot acquire draft authority through any new tool, and the new tools behave identically regardless of mode", async (context) => {
+  const observeOnly = await spawnServer({ agentMode: "observe_only" });
+  const draft = await spawnServer({ agentMode: "draft" });
+  context.after(async () => {
+    await observeOnly.client.close();
+    await draft.client.close();
+  });
+
+  // Same tool, same (empty) arguments, in both modes -- responses must be structurally identical
+  // except for the `mode` field itself. No new tool exposes a way to change or reflect a
+  // different authority level than the process was actually started with.
+  const statusObserve = parse(await observeOnly.client.callTool({ name: "governance.status", arguments: {} }));
+  const statusDraft = parse(await draft.client.callTool({ name: "governance.status", arguments: {} }));
+  assert.equal(statusObserve.mode, "observe_only");
+  assert.equal(statusDraft.mode, "draft");
+  assert.deepEqual(
+    { ...statusObserve, mode: undefined },
+    { ...statusDraft, mode: undefined },
+    "governance.status must expose identical capability information regardless of caller mode -- it is a read of static facts, not a privilege"
+  );
+
+  // A self-model write proposal must still be denied under observe_only exactly as before this
+  // change (mode floor untouched) -- proves this extension did not weaken C2 enforcement.
+  const writeProposal = {
+    actor: "obs-test", action: "nyxa_self_model_write_goal", target: "self-model:/goals",
+    scope: "regression: mode floor must still block this under observe_only",
+    claims: [{ tag: "CLAIM", statement: "test", source: "test" }],
+    uncertainty: 0.1, requestedCapabilityClass: "I1", estimatedIrreversibility: "I1",
+    provenance: { taskId: "obs", runId: "mode-floor", requestingIdentity: "tester" }
+  };
+  const deniedUnderObserve = parse(await observeOnly.client.callTool({
+    name: "nyxa_propose_action", arguments: { proposal: writeProposal }
+  }));
+  assert.equal(deniedUnderObserve.policy_decision, "DENY");
+  assert.equal(deniedUnderObserve.domain, "C2");
+  assert.equal(deniedUnderObserve.reason, "mode_below_minimum");
+
+  // No new tool has any argument shape capable of expressing a mode change -- already covered by
+  // the adversarial argument test above (mode/agentMode keys rejected on every one), reasserted
+  // here against both live processes for both modes as a direct regression guard.
+  for (const { client } of [observeOnly, draft]) {
+    const attempt = parse(await client.callTool({ name: "governance.status", arguments: { mode: "supervised_execute" } }));
+    assert.equal(attempt.error?.code, "arguments_invalid");
+  }
+});

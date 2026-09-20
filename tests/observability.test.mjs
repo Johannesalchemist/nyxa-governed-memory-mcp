@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -31,14 +31,14 @@ function ev(overrides = {}) {
   };
 }
 
-test("governance.status reports E0 as not_implemented and does not invent a stage that doesn't exist", () => {
+test("governance.status reports implemented E0 and distributed capability enforcement", () => {
   const status = buildGovernanceStatus({ agentMode: "observe_only" });
   const e0 = status.gamma_engine.checks_in_order.find((c) => c.domain === "E0");
   assert.ok(e0, "E0 must be explicitly reported, not silently omitted");
-  assert.match(e0.description, /not_implemented/);
+  assert.match(e0.description, /implemented.*epistemic/);
   const c1to5 = status.gamma_engine.checks_in_order.filter((c) => /^C[1-5]$/.test(c.domain));
   assert.equal(c1to5.length, 5, "exactly C1-C5 must be reported as real, no more no less");
-  assert.match(status.capability_gate.as_named_module, /not_implemented/);
+  assert.match(status.capability_gate.as_named_module, /distributed/);
   assert.match(status.scope, /Room|persona/i, "must disclose it does not observe the separate Room/persona governance system");
 });
 
@@ -118,7 +118,7 @@ test("extractEvidence-equivalent shape check: a payload whose own top-level fiel
   assert.ok("entries" in view);
 });
 
-test("memory.status reuses backend.health() and audit integrity verbatim, reports candidates as not_implemented", async () => {
+test("memory.status reuses backend.health() and audit integrity verbatim, reports implemented candidate persistence", async () => {
   const fakeBackend = { health: async () => ({ type: "local", status: "ready", detail: "x" }) };
   const fakeAuditLog = {
     recent: async () => [{ timestamp: "t1" }],
@@ -128,7 +128,7 @@ test("memory.status reuses backend.health() and audit integrity verbatim, report
   assert.equal(status.backend.status, "ready");
   assert.equal(status.audit_log.integrity_valid, true);
   assert.equal(status.audit_log.latest_event_timestamp, "t1");
-  assert.equal(status.memory_candidates.implemented, false);
+  assert.equal(status.memory_candidates.implemented, true);
 });
 
 // ---------------------------------------------------------------------------
@@ -362,5 +362,54 @@ test("observe_only cannot acquire draft authority through any new tool, and the 
   for (const { client } of [observeOnly, draft]) {
     const attempt = parse(await client.callTool({ name: "governance.status", arguments: { mode: "supervised_execute" } }));
     assert.equal(attempt.error?.code, "arguments_invalid");
+  }
+});
+
+
+test("governed production write evidence is operational, not a truth claim about written content", async () => {
+  const source = await readFile(
+    new URL("../src/server.ts", import.meta.url),
+    "utf8"
+  );
+
+  const requiredClaims = [
+    "Governed self-model identity write completed.",
+    "Governed self-model personality write completed.",
+    "Governed self-model record write completed.",
+    "Governed current-state snapshot write completed.",
+    "Governed belief record write completed.",
+    "Governed capability-limitation record write completed.",
+    "Governed goal record write completed.",
+    "Governed autobiographical-event append completed.",
+    "Governed dream candidate persistence completed.",
+    "Governed memory candidate persistence completed.",
+    "Governed memory candidate promotion completed."
+  ];
+
+  for (const claim of requiredClaims) {
+    assert.equal(
+      source.includes(claim),
+      true,
+      `missing operational evidence claim: ${claim}`
+    );
+  }
+
+  // Guard the semantic boundary: evidence may attest persistence/effect,
+  // but must not assert truth/correctness of the written proposition.
+  const forbiddenTruthClaims = [
+    "belief is true",
+    "candidate is true",
+    "candidate is correct",
+    "memory is true",
+    "goal is correct"
+  ];
+
+  const lower = source.toLowerCase();
+  for (const phrase of forbiddenTruthClaims) {
+    assert.equal(
+      lower.includes(phrase),
+      false,
+      `write evidence must not make epistemic truth claim: ${phrase}`
+    );
   }
 });

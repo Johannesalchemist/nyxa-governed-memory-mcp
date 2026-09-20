@@ -1,35 +1,28 @@
 import type { NyxaConfig } from "../config/env.js";
+import { TOOL_POLICIES } from "../policy/toolPolicy.js";
+import { enforcePolicy } from "../policy/enforcePolicy.js";
+import { isToolAllowedByProfile } from "../policy/toolProfile.js";
 
 export const POLICY_MODE_TOOL_ANNOTATIONS = {
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true
-  }
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
 } as const;
 
-export type PolicyModeResponse = {
-  mode: string;
-  allowed_capabilities: string[];
-  blocked_capabilities: string[];
-};
-
-export function buildPolicyMode(config: NyxaConfig): PolicyModeResponse {
+export function buildPolicyMode(config: NyxaConfig) {
+  const profile = config.toolProfile ?? { active: false as const };
+  const tools = Object.keys(TOOL_POLICIES).map(tool => {
+    const decision = enforcePolicy(tool, config.agentMode);
+    const exposed = isToolAllowedByProfile(profile, tool);
+    return { tool, exposed_by_profile: exposed,
+      policy_allowed: decision.allowed,
+      outcome: exposed ? decision.outcome : "DENIED",
+      reason: exposed ? decision.reason : "tool_not_allowed_by_profile" };
+  });
   return {
     mode: config.agentMode,
-    allowed_capabilities: [
-      "read",
-      "observe",
-      "audit",
-      "document_candidates_future"
-    ],
-    blocked_capabilities: [
-      "send_email",
-      "write_files",
-      "execute_shell",
-      "modify_external_systems",
-      "autonomous_execution",
-      "hidden_screen_capture"
-    ]
+    tool_profile: profile.active ? profile.name : null,
+    scope: "Direct-call policy preflight only. Feature flags are configuration, not authorization. Proposal actions are evaluated separately by gamma/E0, mandates, execution gate and connector constraints; a policy allowance does not guarantee dispatch or effect.",
+    allowed_capabilities: tools.filter(t => t.exposed_by_profile && t.policy_allowed).map(t => t.tool),
+    blocked_capabilities: tools.filter(t => !t.exposed_by_profile || !t.policy_allowed).map(t => t.tool),
+    tools
   };
 }

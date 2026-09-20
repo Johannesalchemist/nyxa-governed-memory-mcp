@@ -6,7 +6,7 @@ async function main(): Promise<void> {
   await server.start();
 }
 
-main().catch(() => {
-  console.error("nyxa_governed_memory_mcp_startup_failed");
+main().catch((error: unknown) => {
+  console.error("nyxa_governed_memory_mcp_startup_failed", error instanceof Error ? error.message : String(error));
   process.exit(1);
 });

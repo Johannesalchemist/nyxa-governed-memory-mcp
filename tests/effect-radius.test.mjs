@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { resolveEffectRadius } from "../dist/governance/effectResolver.js";
+import { evaluateProposal } from "../dist/governance/gamma.js";
+import { TOOL_POLICIES } from "../dist/policy/toolPolicy.js";
+const NOW=Date.parse("2026-09-18T20:00:00Z");
+const proposal={actor:"rt",action:"nyxa_apply_patch",target:"dev:/x.ts",scope:"one patch",claims:[{tag:"FACT",statement:"synthetic",source:"test"}],uncertainty:0,requestedCapabilityClass:"I1",estimatedIrreversibility:"I1",provenance:{taskId:"rt",runId:"1",requestingIdentity:"tester"}};
+test("read-only resolves zero",()=>assert.equal(resolveEffectRadius("nyxa_read_file",TOOL_POLICIES.nyxa_read_file).radius,0));
+test("mutation without evidence is unknown",()=>assert.equal(resolveEffectRadius("nyxa_apply_patch",TOOL_POLICIES.nyxa_apply_patch).status,"unknown"));
+test("trusted radius accepted, invalid rejected",()=>{assert.equal(resolveEffectRadius("nyxa_apply_patch",TOOL_POLICIES.nyxa_apply_patch,100000).radius,100000);assert.equal(resolveEffectRadius("nyxa_apply_patch",TOOL_POLICIES.nyxa_apply_patch,-1).status,"unknown")});
+test("unknown mutation escalates",()=>{const d=evaluateProposal(proposal,{toolPolicy:TOOL_POLICIES.nyxa_apply_patch,mode:"draft",now:NOW,effectRadiusUnknown:true});assert.equal(d.outcome,"ESCALATE");assert.equal(d.reason,"effect_radius_unknown_requires_human_review")});
+test("100k downstream escalates",()=>{const d=evaluateProposal(proposal,{toolPolicy:TOOL_POLICIES.nyxa_apply_patch,mode:"draft",now:NOW,effectRadius:100000});assert.equal(d.outcome,"ESCALATE")});

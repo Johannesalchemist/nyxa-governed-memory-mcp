@@ -6,6 +6,7 @@ import { isProtectedDevPath, splitVirtualPath } from "../connector/pathGuard.js"
 import { ConnectorError } from "../connector/errors.js";
 import { posix } from "node:path";
 import type { ValidatedProposal } from "./proposal.js";
+import type { HumanGrantCheckResult } from "./humanGrant.js";
 
 export type GammaOutcome = "ALLOW" | "DENY" | "ESCALATE" | "DEGRADE" | "UNKNOWN";
 export type GammaDomain = "C1" | "C2" | "C3" | "C4" | "C5" | null;
@@ -26,6 +27,21 @@ export type GammaContext = {
   /** Reserved infra-failure signal. Never derived from proposal fields, so a proposer cannot
    *  set this themselves — it exists for future backend-health wiring, not attacker control. */
   backendDegraded?: boolean;
+  /**
+   * Result of validating a presented human-grant reference (governance/humanGrant.ts),
+   * computed by the caller (server.ts) BEFORE evaluateProposal ever runs, from real durable
+   * state (the grant ledger + consumption markers) gamma itself never touches — same pattern
+   * as backendDegraded above: an externally-computed trust signal, never something a proposal's
+   * own fields can set directly. Undefined/omitted is treated identically to
+   * {status:"not_presented"} (see the C2 check below), so every existing requiresHumanApproval
+   * tool (e.g. nyxa_e2e_escalate_scratch) is completely unaffected by this field's addition.
+   */
+  humanGrant?: HumanGrantCheckResult;
+  /** Durable delegated authority resolved server-side; never sourced from proposal fields. */
+  mandateAuthorized?: boolean;
+  /** Server-resolved downstream propagation count. Never trust proposal self-report. */
+  effectRadius?: number;
+  effectRadiusUnknown?: boolean;
 };
 
 const STALE_EVIDENCE_MS = 24 * 60 * 60 * 1000;
@@ -104,17 +120,35 @@ export function evaluateProposal(proposal: ValidatedProposal, context: GammaCont
     return deny("C2", "mode_below_minimum");
   }
   if (context.toolPolicy.requiresHumanApproval) {
-    return escalate("C2", "human_approval_required");
+    const grant = context.humanGrant ?? { status: "not_presented" as const };
+    switch (grant.status) {
+      case "valid":
+        break; // a real, scoped, unexpired, unconsumed grant -- fall through past C2.
+      case "not_presented":
+        // No attempt to authenticate at all -- the ordinary, unchanged ESCALATE default.
+        return escalate("C2", "human_approval_required");
+      case "invalid_grant_id":
+        return deny("C2", "human_grant_invalid");
+      case "capability_mismatch":
+        return deny("C2", "human_grant_capability_mismatch");
+      case "target_mismatch":
+        return deny("C2", "human_grant_target_mismatch");
+      case "expired":
+        return deny("C2", "human_grant_expired");
+      case "already_consumed":
+        return deny("C2", "human_grant_already_consumed");
+    }
   }
 
-  // C3 — Irreversibility: ground truth is the tool's real capabilityClass, never the proposer's
-  // self-reported estimate. I2/I3 can never be authorized through a proposal at all.
+  // C3 — Irreversibility: capability is preserved; authority governs whether higher-impact
+  // capabilities may execute. I2/I3 therefore remain unreachable by default, but a durable,
+  // server-resolved mandate may authorize the exact actor/action/scope/target corridor.
   const trueClass = context.toolPolicy.capabilityClass;
-  if (trueClass === "I2" || trueClass === "I3") {
-    return deny("C3", `capability_class_${trueClass}_not_authorizable`);
-  }
   if (CAPABILITY_RANK[proposal.estimatedIrreversibility] < CAPABILITY_RANK[trueClass]) {
     return deny("C3", "irreversibility_underestimated");
+  }
+  if ((trueClass === "I2" || trueClass === "I3") && !context.mandateAuthorized) {
+    return escalate("C3", `capability_class_${trueClass}_requires_mandate`);
   }
 
   // C4 — Provenance validity: every claim must carry a real (non-blank) source, and any claim
@@ -131,6 +165,20 @@ export function evaluateProposal(proposal: ValidatedProposal, context: GammaCont
       if (!Number.isFinite(age) || age > STALE_EVIDENCE_MS || age < 0) {
         return deny("C4", `stale_evidence_claim_${index}`);
       }
+    }
+  }
+
+  // C5 — Escalation reachability: high-risk or high-propagation actions route to a human.
+  // effectRadius is a server-resolved trust signal. Unknown/omitted preserves existing behavior.
+  if (context.effectRadiusUnknown) {
+    return escalate("C5", "effect_radius_unknown_requires_human_review");
+  }
+  if (context.effectRadius !== undefined) {
+    if (!Number.isSafeInteger(context.effectRadius) || context.effectRadius < 0) {
+      return deny("C5", "effect_radius_invalid");
+    }
+    if (context.effectRadius >= 1000) {
+      return escalate("C5", "effect_radius_high_requires_human_review");
     }
   }
 

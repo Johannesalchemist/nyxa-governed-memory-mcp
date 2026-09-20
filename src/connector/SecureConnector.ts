@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, opendir, readFile, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, opendir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 import { hostname, loadavg, platform, release, totalmem, freemem, uptime } from "node:os";
 import { ConnectorError } from "./errors.js";
 import { isBlockedEntryName, PathGuard, validateGitBase } from "./pathGuard.js";
-import { runFixedProcess, type ProcessResult } from "./processRunner.js";
+import { PatchReplayGuard } from "../governance/patchReplayGuard.js";
+import { runFixedProcess, runSandboxedProcess, type ProcessResult } from "./processRunner.js";
 import { sanitizeText } from "./redaction.js";
 import type {
   ConnectorConfig,
@@ -62,12 +63,14 @@ function mapById<T extends { id: string }>(items: T[], id: string, code: string)
 
 export class SecureConnector {
   private readonly guard: PathGuard;
+  private readonly patchReplayGuard: PatchReplayGuard;
 
   public constructor(
     private readonly config: ConnectorConfig,
     private readonly dataDir: string
   ) {
     this.guard = new PathGuard(config);
+    this.patchReplayGuard = new PatchReplayGuard(dataDir);
   }
 
   public async systemStatus(): Promise<ConnectorResult> {
@@ -292,20 +295,51 @@ export class SecureConnector {
     if (!this.config.devEnabled) throw new ConnectorError("dev_mode_disabled", "Development capabilities are disabled.");
     const target = mapById(this.config.testTargets, targetId, "test_target_not_allowed");
     await this.verifyTargetIntegrity(target);
-    const result = await runFixedProcess({
-      executable: target.executable,
-      args: target.args,
-      cwd: target.cwd,
-      timeoutMs: target.timeoutMs,
-      maxOutputChars: this.config.limits.maxOutputChars
-    });
+    const result = await this.runInSandbox(target);
     const passed = result.exitCode === 0 && !result.timedOut;
     if (!passed) throw new ConnectorError(result.timedOut ? "test_timeout" : "test_failed", "Approved test target failed.", "INVALID");
-    return supportedResult("I1", target.id, "fixed test target adapter", "Run an approved deterministic test target", target.trust, {
+    return supportedResult("I1", target.id, "sandboxed test target adapter", "Run an approved deterministic test target inside the execution boundary", target.trust, {
       exit_code: result.exitCode,
       stdout: result.stdout,
       stderr: result.stderr
     }, { truncated: result.truncated, redactions: result.redactions });
+  }
+
+  private async runInSandbox(target: ConnectorTestTarget): Promise<ProcessResult> {
+    if (
+      typeof target.network !== "boolean" ||
+      !Number.isFinite(target.memoryLimitKb) || target.memoryLimitKb <= 0 ||
+      !Number.isFinite(target.nprocLimit) || target.nprocLimit <= 0 ||
+      !Number.isFinite(target.scratchSizeKb) || target.scratchSizeKb <= 0
+    ) {
+      throw new ConnectorError(
+        "test_target_capabilities_invalid",
+        "Approved test target is missing required sandbox capability declarations.",
+        "INVALID"
+      );
+    }
+    const scratchRoot = join(this.dataDir, "run-test-scratch");
+    const scratchDir = join(scratchRoot, `${Date.now()}-${randomUUID()}`);
+    await mkdir(scratchDir, { recursive: true, mode: 0o700 });
+    try {
+      return await runSandboxedProcess({
+        executable: target.executable,
+        args: target.args,
+        cwd: target.cwd,
+        timeoutMs: target.timeoutMs,
+        maxOutputChars: this.config.limits.maxOutputChars,
+        sandbox: {
+          network: target.network,
+          memoryLimitKb: target.memoryLimitKb,
+          nprocLimit: target.nprocLimit,
+          scratchSizeKb: target.scratchSizeKb,
+          scratchDir,
+          extraReadOnlyPath: target.cwd
+        }
+      });
+    } finally {
+      await rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 
   private async verifyTargetIntegrity(target: ConnectorTestTarget): Promise<void> {
@@ -327,6 +361,44 @@ export class SecureConnector {
     this.validateSingleFilePatch(patch, target.relativePath);
     const repository = this.config.repositories.find((candidate) => candidate.path === target.rootRealPath);
     if (!repository) throw new ConnectorError("dev_repository_not_allowed", "Development root is not an approved repository.");
+
+    // Declarative, effect-level replay protection: the effect id is deterministic over
+    // (repository, target path, exact patch bytes) -- an identical request against an
+    // identical prior-successful effect never re-runs git at all (see PatchReplayGuard).
+    const effectId = this.patchReplayGuard.effectId(repository.id, target.relativePath, patch);
+    const completed = await this.patchReplayGuard.checkCompleted(effectId);
+    if (completed) {
+      const stored = completed.result as ConnectorResult;
+      return {
+        ...stored,
+        data: { ...(stored.data as Record<string, unknown>), replay_status: "replay", original_completed_at: completed.completedAt },
+        evidence: { ...stored.evidence, observations: [...stored.evidence.observations, "replay: identical effect id already completed; no re-mutation performed"] }
+      };
+    }
+    const claimed = await this.patchReplayGuard.claimInFlight(effectId);
+    if (!claimed) {
+      throw new ConnectorError(
+        "patch_replay_in_progress",
+        "An identical patch effect is already being applied by another request; denying the concurrent duplicate.",
+        "INVALID"
+      );
+    }
+    try {
+      const result = await this.applyPatchEffect(virtualPath, patch, target, repository);
+      const withStatus: ConnectorResult = { ...result, data: { ...(result.data as Record<string, unknown>), replay_status: "applied" } };
+      await this.patchReplayGuard.commitCompleted(effectId, withStatus);
+      return withStatus;
+    } finally {
+      await this.patchReplayGuard.releaseInFlight(effectId);
+    }
+  }
+
+  private async applyPatchEffect(
+    virtualPath: string,
+    patch: string,
+    target: Awaited<ReturnType<PathGuard["resolveDevTarget"]>>,
+    repository: ConnectorRepository
+  ): Promise<ConnectorResult> {
     const beforeStatus = await this.runGit(repository, ["status", "--porcelain=v1", "--untracked-files=all", "--", target.relativePath]);
     if (beforeStatus.exitCode !== 0) throw new ConnectorError("git_status_failed", "Could not verify target state.", "INVALID");
 

@@ -119,16 +119,16 @@ test("fake/unsourced evidence is DENIED at C4 (schema catches empty, gamma catch
   assert.equal(decision.domain, "C4");
 });
 
-test("attempted capability widening (I2/I3 action proposed) is DENIED at C3 regardless of other fields", () => {
+test("I2/I3 capability without durable mandate ESCALATES at C3", () => {
   const proposal = parseProposal(baseProposal({ estimatedIrreversibility: "I3" }));
   const i2Policy = { ...TOOL_POLICIES["nyxa_read_file"], capabilityClass: "I2" };
   const decisionI2 = evaluateProposal(proposal, { toolPolicy: i2Policy, mode: "observe_only", now: NOW });
-  assert.equal(decisionI2.outcome, "DENY");
+  assert.equal(decisionI2.outcome, "ESCALATE");
   assert.equal(decisionI2.domain, "C3");
 
   const i3Policy = { ...TOOL_POLICIES["nyxa_read_file"], capabilityClass: "I3" };
   const decisionI3 = evaluateProposal(proposal, { toolPolicy: i3Policy, mode: "observe_only", now: NOW });
-  assert.equal(decisionI3.outcome, "DENY");
+  assert.equal(decisionI3.outcome, "ESCALATE");
   assert.equal(decisionI3.domain, "C3");
 });
 
@@ -174,4 +174,29 @@ test("attempted self-authorization: proposal targeting governance/policy source 
   assert.equal(decision.outcome, "DENY");
   assert.equal(decision.domain, "C1");
   assert.equal(decision.reason, "target_is_protected_governance_surface");
+});
+
+test("server-resolved high effect radius escalates at C5", () => {
+  const proposal = parseProposal(baseProposal());
+  const decision = evaluateProposal(proposal, { toolPolicy: TOOL_POLICIES["nyxa_read_file"], mode: "observe_only", now: NOW, effectRadius: 100000 });
+  assert.equal(decision.outcome, "ESCALATE");
+  assert.equal(decision.domain, "C5");
+  assert.equal(decision.reason, "effect_radius_high_requires_human_review");
+});
+
+test("small or unknown effect radius preserves ordinary allow semantics", () => {
+  const proposal = parseProposal(baseProposal());
+  for (const effectRadius of [undefined, 0, 999]) {
+    const decision = evaluateProposal(proposal, { toolPolicy: TOOL_POLICIES["nyxa_read_file"], mode: "observe_only", now: NOW, ...(effectRadius === undefined ? {} : { effectRadius }) });
+    assert.equal(decision.outcome, "ALLOW");
+  }
+});
+
+test("invalid server-resolved effect radius fails closed at C5", () => {
+  const proposal = parseProposal(baseProposal());
+  for (const effectRadius of [-1, 1.5, Number.NaN]) {
+    const decision = evaluateProposal(proposal, { toolPolicy: TOOL_POLICIES["nyxa_read_file"], mode: "observe_only", now: NOW, effectRadius });
+    assert.equal(decision.outcome, "DENY");
+    assert.equal(decision.reason, "effect_radius_invalid");
+  }
 });

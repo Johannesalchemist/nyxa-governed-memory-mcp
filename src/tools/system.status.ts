@@ -13,6 +13,7 @@ export type SystemStatusResponse = {
   version: "0.1.1";
   agent_mode: string;
   backend: string;
+  feature_flags_semantics: string;
   feature_flags: {
     dreaming_enabled: boolean;
     apprentice_enabled: boolean;
@@ -29,6 +30,7 @@ export function buildSystemStatus(config: NyxaConfig): SystemStatusResponse {
     version: config.version,
     agent_mode: config.agentMode,
     backend: config.memoryBackend,
+    feature_flags_semantics: "Configured switches only; effective authorization additionally depends on mode, tool profile, policy, governance and connector constraints.",
     feature_flags: {
       dreaming_enabled: config.featureFlags.dreamingEnabled,
       apprentice_enabled: config.featureFlags.apprenticeEnabled,

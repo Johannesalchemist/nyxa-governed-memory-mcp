@@ -153,9 +153,13 @@ function patchConfig(root, verifyArgs) {
     executable: "/usr/bin/node",
     args: verifyArgs,
     cwd: root,
-    timeoutMs: 3000,
+    timeoutMs: 30000,
     trust: "VERIFIED_SOURCE",
-    integrityFiles: []
+    integrityFiles: [],
+    network: false,
+    memoryLimitKb: 2_097_152,
+    nprocLimit: 64,
+    scratchSizeKb: 65_536
   }];
   return config;
 }

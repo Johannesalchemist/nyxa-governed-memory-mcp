@@ -23,8 +23,39 @@ export const CHATGPT_READONLY_TOOLS: ReadonlySet<string> = new Set([
   "memory.status"
 ]);
 
+export const CHATGPT_GOVERNED_EXECUTE_TOOLS: ReadonlySet<string> = new Set([
+  ...CHATGPT_READONLY_TOOLS,
+  "nyxa_memory_recall_candidates",
+  "nyxa_company_audit_read",
+  "nyxa_propose_action",
+  "nyxa_human_grant_issue",
+  "nyxa_mandate_issue",
+  "nyxa_mandate_revoke",
+  "nyxa_mandate_list",
+
+  // Persistent Governed Workloop: bounded execution corridor.
+  // This profile remains only an exposure allowlist. ToolPolicy, Gamma, E0,
+  // mandates, ExecutionGate and SecureConnector/PathGuard still authorize
+  // every actual invocation/effect independently.
+  "arbeitsbahnhof.task.enqueue",
+  "arbeitsbahnhof.task.claim",
+  "arbeitsbahnhof.task.result",
+
+  // Bounded development/inspection tools required for governed autonomous work.
+  "nyxa_system_status",
+  "nyxa_list",
+  "nyxa_read_file",
+  "nyxa_search",
+  "nyxa_git_status",
+  "nyxa_git_diff",
+  "nyxa_logs",
+  "nyxa_run_test",
+  "nyxa_apply_patch"
+]);
+
 const KNOWN_PROFILES: Readonly<Record<string, ReadonlySet<string>>> = {
-  chatgpt_readonly: CHATGPT_READONLY_TOOLS
+  chatgpt_readonly: CHATGPT_READONLY_TOOLS,
+  chatgpt_governed_execute: CHATGPT_GOVERNED_EXECUTE_TOOLS
 };
 
 export type ResolvedToolProfile =

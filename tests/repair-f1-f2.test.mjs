@@ -138,7 +138,12 @@ test("F1: direct and proposal-routed connector execution share one rate-limit po
 
   // The single remaining unit is consumed via the PROPOSAL-ROUTED path -- if F1 is fixed, this
   // succeeds (ALLOW, quota was shared and this was the last unit) and the pool is now empty.
-  const proposalCall = () => client.callTool({
+  // Distinct runId per call: the general proposal path now enforces per-(action,target,
+  // taskId,runId) replay protection (see governance/replayGuard.ts), so two calls that are
+  // meant to be independently evaluated by the rate limiter must not share a dedup identity --
+  // an identical runId on both would make the second one a replay DENY, never reaching the
+  // rate limiter at all, which is a different check than the one this test targets.
+  const proposalCall = (runId) => client.callTool({
     name: "nyxa_propose_action",
     arguments: {
       proposal: {
@@ -146,17 +151,17 @@ test("F1: direct and proposal-routed connector execution share one rate-limit po
         scope: "consume the last shared rate-limit unit via the proposal path",
         claims: [{ tag: "FACT", statement: "probe", source: "f1-regression" }],
         uncertainty: 0.1, requestedCapabilityClass: "I0", estimatedIrreversibility: "I0",
-        provenance: { taskId: "f1", runId: "last-unit", requestingIdentity: "tester" }
+        provenance: { taskId: "f1", runId, requestingIdentity: "tester" }
       }
     }
   });
-  const lastUnit = parse(await proposalCall());
+  const lastUnit = parse(await proposalCall("last-unit"));
   assert.equal(lastUnit.policy_decision, "ALLOW", "the shared pool must have exactly one unit left for the proposal path to consume");
 
   // Now the pool is empty (LIMIT units consumed across BOTH paths combined). The next
   // proposal-routed call must be rate-limited -- this is the confirmed-fixed behavior: before
   // the repair this call always succeeded regardless of how many direct calls preceded it.
-  const overLimit = parse(await proposalCall());
+  const overLimit = parse(await proposalCall("over-limit"));
   assert.equal(overLimit.policy_decision, "DENIED");
   assert.equal(overLimit.error.code, "rate_limited");
   assert.equal(overLimit.error.message, "Rate limit exceeded.");

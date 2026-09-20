@@ -1,5 +1,11 @@
 export type CapabilityClass = "I0" | "I1" | "I2" | "I3";
-export type PolicyOutcome = "ALLOWED" | "DENIED" | "REQUIRES_APPROVAL" | "INVALID" | "UNKNOWN";
+// "HELD" (Step 11B): unlike gamma's ESCALATE/DEGRADE (deliberately mapped onto existing values
+// in server.ts's mapGammaOutcomeToAuditDecision, see its own comment), EPISTEMIC_HOLD has no
+// adequate existing value to approximate -- REQUIRES_APPROVAL is an authority question, UNKNOWN
+// means an unrecognized tool, and DENIED is explicitly disallowed (Step 11B.3: "Do not mislabel
+// it DENY", since gamma DID allow and a human grant may already be valid -- only epistemic
+// sufficiency is what's missing). Widened here, once, for exactly this reason.
+export type PolicyOutcome = "ALLOWED" | "DENIED" | "REQUIRES_APPROVAL" | "INVALID" | "UNKNOWN" | "HELD";
 export type EvidenceStatus = "SUPPORTED" | "UNSUPPORTED" | "CONTRADICTED" | "UNKNOWN";
 export type EvidenceTrust = "VERIFIED_SOURCE" | "UNVERIFIED_SOURCE";
 
@@ -23,6 +29,10 @@ export type ConnectorTestTarget = {
   timeoutMs: number;
   trust: EvidenceTrust;
   integrityFiles: IntegrityFile[];
+  network: boolean;
+  memoryLimitKb: number;
+  nprocLimit: number;
+  scratchSizeKb: number;
 };
 
 export type ConnectorLimits = {
