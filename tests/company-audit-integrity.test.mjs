@@ -13,14 +13,18 @@ const ALLOW = {
 
 test("company audit read accepts intact chain and fails closed on tamper", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "nyxa-company-audit-"));
+  const tenantId = "11111111-1111-4111-8111-111111111111";
+  const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const auditId = "5f6e5d42-4d66-4f43-9d0f-8c3e99d15a01";
 
   const store = new CompanyAuditStore(dataDir);
   await store.init();
 
   await store.writeObservation(
-    `company-audit:/${auditId}`,
+    `company-audit:/tenant/${tenantId}/organization/${organizationId}/audit/${auditId}`,
     {
+      tenant_id: tenantId,
+      organization_id: organizationId,
       audit_id: auditId,
       category: "company",
       field_path: "company.name",
@@ -40,7 +44,7 @@ test("company audit read accepts intact chain and fails closed on tamper", async
     ALLOW
   );
 
-  const intact = await store.readAudit(auditId);
+  const intact = await store.readAudit(tenantId, organizationId, auditId);
   assert.equal(intact.length, 1);
   assert.equal(intact[0].value, "Integrity Test GmbH");
 
@@ -52,7 +56,7 @@ test("company audit read accepts intact chain and fails closed on tamper", async
   await writeFile(path, `${JSON.stringify(line)}\n`, "utf8");
 
   await assert.rejects(
-    () => store.readAudit(auditId),
+    () => store.readAudit(tenantId, organizationId, auditId),
     /company_audit_chain_invalid/
   );
 

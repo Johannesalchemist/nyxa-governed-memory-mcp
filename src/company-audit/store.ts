@@ -60,7 +60,11 @@ export class CompanyAuditStore {
   ): Promise<number | undefined> {
     const parsed = AuditObservationInputSchema.safeParse(payload);
     if (!parsed.success) return undefined;
-    if (target !== `company-audit:/${parsed.data.audit_id}`) return undefined;
+    if (target !== this.auditTarget(
+      parsed.data.tenant_id,
+      parsed.data.organization_id,
+      parsed.data.audit_id
+    )) return undefined;
 
     try {
       const handle = await this.openVerifiedAppend();
@@ -81,7 +85,13 @@ export class CompanyAuditStore {
 
     const input = AuditObservationInputSchema.parse(payload);
 
-    if (target !== `company-audit:/${input.audit_id}`) {
+    if (
+      target !== this.auditTarget(
+        input.tenant_id,
+        input.organization_id,
+        input.audit_id
+      )
+    ) {
       throw new Error("company_audit_target_mismatch");
     }
 
@@ -130,13 +140,30 @@ export class CompanyAuditStore {
     return result;
   }
 
-  public async readAudit(auditId: string): Promise<AuditObservation[]> {
+  public async readAudit(
+    tenantId: string,
+    organizationId: string,
+    auditId: string
+  ): Promise<AuditObservation[]> {
     const raw = await readFile(this.path, "utf8");
     const lines = this.parseVerifiedLines(raw);
 
     return lines
-      .filter(line => line.audit_id === auditId)
+      .filter(
+        line =>
+          line.tenant_id === tenantId &&
+          line.organization_id === organizationId &&
+          line.audit_id === auditId
+      )
       .map(({ previousEventHash, eventHash, ...record }) => record);
+  }
+
+  private auditTarget(
+    tenantId: string,
+    organizationId: string,
+    auditId: string
+  ): string {
+    return `company-audit:/tenant/${tenantId}/organization/${organizationId}/audit/${auditId}`;
   }
 
   private async openVerifiedAppend(): Promise<FileHandle> {

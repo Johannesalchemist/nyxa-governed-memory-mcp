@@ -578,8 +578,12 @@ export class NyxaGovernedMemoryServer {
           "Reads non-authoritative Company Audit observations for one audit UUID. " +
           "Always I0 and side-effect-free; recorded epistemic and evidence status are preserved.",
         inputSchema: objectSchema(
-          { audit_id: stringSchema(36) },
-          ["audit_id"]
+          {
+            tenant_id: stringSchema(36),
+            organization_id: stringSchema(36),
+            audit_id: stringSchema(36)
+          },
+          ["tenant_id", "organization_id", "audit_id"]
         ),
         annotations: READ_ANNOTATIONS
       } as const;
@@ -630,7 +634,7 @@ export class NyxaGovernedMemoryServer {
         return await this.handleMemoryRecallCandidates(input);
       }
       if (name === "nyxa_company_audit_read") {
-        assertKeys(input, ["audit_id"]);
+        assertKeys(input, ["tenant_id", "organization_id", "audit_id"]);
         return await this.handleCompanyAuditRead(input);
       }
       if (name === "nyxa_propose_action") {
@@ -1203,27 +1207,39 @@ export class NyxaGovernedMemoryServer {
       this.config.agentMode
     );
 
+    const tenantId = requiredString(input, "tenant_id", 36);
+    const organizationId = requiredString(input, "organization_id", 36);
     const auditId = requiredString(input, "audit_id", 36);
 
+    const canonicalUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
     if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(auditId)
+      !canonicalUuid.test(tenantId) ||
+      !canonicalUuid.test(organizationId) ||
+      !canonicalUuid.test(auditId)
     ) {
       return toolJsonResult(
         {
           error: "arguments_invalid",
-          reason: "audit_id must be a canonical UUID",
+          reason: "tenant_id, organization_id and audit_id must be canonical UUIDs",
           tool: "nyxa_company_audit_read"
         },
         true
       );
     }
 
+    const resource = {
+      tenant_id: tenantId,
+      organization_id: organizationId,
+      audit_id: auditId
+    };
+
     if (!decision.allowed) {
       await this.audit("blocked", "nyxa_company_audit_read", {
         reason: decision.reason,
-        audit_id: auditId
+        ...resource
       });
-
       return toolJsonResult(
         {
           error: "policy_blocked",
@@ -1235,16 +1251,19 @@ export class NyxaGovernedMemoryServer {
     }
 
     try {
-      const observations =
-        await this.companyAuditStore.readAudit(auditId);
+      const observations = await this.companyAuditStore.readAudit(
+        tenantId,
+        organizationId,
+        auditId
+      );
 
       await this.audit("allowed", "nyxa_company_audit_read", {
-        audit_id: auditId,
+        ...resource,
         count: observations.length
       });
 
       return toolJsonResult({
-        audit_id: auditId,
+        ...resource,
         count: observations.length,
         observations,
         epistemic_notice:
@@ -1252,10 +1271,9 @@ export class NyxaGovernedMemoryServer {
       });
     } catch {
       await this.audit("blocked", "nyxa_company_audit_read", {
-        audit_id: auditId,
+        ...resource,
         reason: "company_audit_read_failed"
       });
-
       return toolJsonResult(
         {
           error: "company_audit_read_failed",

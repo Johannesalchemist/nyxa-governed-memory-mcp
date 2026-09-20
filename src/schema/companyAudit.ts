@@ -49,6 +49,8 @@ export const AUDIT_EVIDENCE_STATUSES = [
 ] as const;
 
 export const AuditObservationInputSchema = z.object({
+  tenant_id: z.string().uuid(),
+  organization_id: z.string().uuid(),
   audit_id: z.string().uuid(),
   category: z.enum(AUDIT_CATEGORIES),
   field_path: z.string().min(1).max(300),
