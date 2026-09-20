@@ -48,7 +48,8 @@ export class CompanyAuditStore {
   public async init(): Promise<void> {
     await ensureDir(this.dir);
     await writeFile(this.path, "", { flag: "a" });
-    const lines = await this.readLines();
+    const raw = await readFile(this.path, "utf8");
+    const lines = this.parseVerifiedLines(raw);
     const last = lines.at(-1);
     this.previousEventHash = last?.eventHash ?? "GENESIS";
   }
@@ -130,7 +131,8 @@ export class CompanyAuditStore {
   }
 
   public async readAudit(auditId: string): Promise<AuditObservation[]> {
-    const lines = await this.readLines();
+    const raw = await readFile(this.path, "utf8");
+    const lines = this.parseVerifiedLines(raw);
 
     return lines
       .filter(line => line.audit_id === auditId)
@@ -162,34 +164,8 @@ export class CompanyAuditStore {
       }
 
       const raw = await handle.readFile("utf8");
-
-      if (raw && !raw.endsWith("\n")) {
-        throw new Error("company_audit_chain_truncated");
-      }
-
-      let previous = "GENESIS";
-
-      for (const line of raw.split("\n").filter(Boolean)) {
-        const value = JSON.parse(line) as StoredLine;
-        const { eventHash, previousEventHash, ...record } = value;
-
-        AuditObservationSchema.parse(record);
-
-        const actual = createHash("sha256")
-          .update(
-            safeJsonStringify({
-              ...record,
-              previousEventHash
-            })
-          )
-          .digest("hex");
-
-        if (previousEventHash !== previous || eventHash !== actual) {
-          throw new Error("company_audit_chain_invalid");
-        }
-
-        previous = eventHash;
-      }
+      const lines = this.parseVerifiedLines(raw);
+      const previous = lines.at(-1)?.eventHash ?? "GENESIS";
 
       if (previous !== this.previousEventHash) {
         throw new Error("company_audit_chain_changed");
@@ -202,18 +178,56 @@ export class CompanyAuditStore {
     }
   }
 
-  private async readLines(): Promise<StoredLine[]> {
-    let raw: string;
-
-    try {
-      raw = await readFile(this.path, "utf8");
-    } catch {
-      return [];
+  private parseVerifiedLines(raw: string): StoredLine[] {
+    if (raw && !raw.endsWith("\n")) {
+      throw new Error("company_audit_chain_truncated");
     }
 
-    return raw
-      .split("\n")
-      .filter(line => line.trim().length > 0)
-      .map(line => JSON.parse(line) as StoredLine);
+    const lines: StoredLine[] = [];
+    let previous = "GENESIS";
+
+    for (const serialized of raw.split("\n").filter(line => line.trim().length > 0)) {
+      let value: StoredLine;
+
+      try {
+        value = JSON.parse(serialized) as StoredLine;
+      } catch {
+        throw new Error("company_audit_chain_invalid");
+      }
+
+      const { eventHash, previousEventHash, ...record } = value;
+
+      try {
+        AuditObservationSchema.parse(record);
+      } catch {
+        throw new Error("company_audit_chain_invalid");
+      }
+
+      if (
+        typeof eventHash !== "string" ||
+        typeof previousEventHash !== "string"
+      ) {
+        throw new Error("company_audit_chain_invalid");
+      }
+
+      const actual = createHash("sha256")
+        .update(
+          safeJsonStringify({
+            ...record,
+            previousEventHash
+          })
+        )
+        .digest("hex");
+
+      if (previousEventHash !== previous || eventHash !== actual) {
+        throw new Error("company_audit_chain_invalid");
+      }
+
+      lines.push(value);
+      previous = eventHash;
+    }
+
+    return lines;
   }
+
 }
