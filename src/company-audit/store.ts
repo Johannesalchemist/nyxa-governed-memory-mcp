@@ -1,11 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  appendFile,
   lstat,
   open,
-  readFile,
   realpath,
-  writeFile,
   type FileHandle
 } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -47,8 +44,10 @@ export class CompanyAuditStore {
 
   public async init(): Promise<void> {
     await ensureDir(this.dir);
-    await writeFile(this.path, "", { flag: "a" });
-    const raw = await readFile(this.path, "utf8");
+    if (await realpath(this.dir) !== resolve(this.dir)) throw new Error("company_audit_directory_alias");
+    const initial = await open(this.path, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+    await initial.close();
+    const raw = await this.readVerifiedFile();
     const lines = this.parseVerifiedLines(raw);
     const last = lines.at(-1);
     this.previousEventHash = last?.eventHash ?? "GENESIS";
@@ -145,8 +144,11 @@ export class CompanyAuditStore {
     organizationId: string,
     auditId: string
   ): Promise<AuditObservation[]> {
-    const raw = await readFile(this.path, "utf8");
+    const raw = await this.readVerifiedFile();
     const lines = this.parseVerifiedLines(raw);
+    if ((lines.at(-1)?.eventHash ?? "GENESIS") !== this.previousEventHash) {
+      throw new Error("company_audit_chain_changed");
+    }
 
     return lines
       .filter(
@@ -164,6 +166,32 @@ export class CompanyAuditStore {
     auditId: string
   ): string {
     return `company-audit:/tenant/${tenantId}/organization/${organizationId}/audit/${auditId}`;
+  }
+
+  private async readVerifiedFile(): Promise<string> {
+    if (await realpath(this.dir) !== resolve(this.dir)) throw new Error("company_audit_directory_alias");
+    const handle = await open(this.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const before = await handle.stat();
+      const named = await lstat(this.path);
+      if (!before.isFile() || before.nlink !== 1 || before.ino !== named.ino || before.dev !== named.dev || before.size > 32 * 1024 * 1024) {
+        throw new Error("company_audit_store_not_bounded");
+      }
+      // Bounded allocation AND bounded read, including a file that grows after fstat.
+      const buffer = Buffer.alloc(before.size + 1);
+      let bytes = 0;
+      while (bytes < buffer.length) {
+        const part = await handle.read(buffer, bytes, buffer.length - bytes, bytes);
+        if (!part.bytesRead) break;
+        bytes += part.bytesRead;
+      }
+      const after = await handle.stat();
+      const finalName = await lstat(this.path);
+      if (bytes !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs ||
+          after.ctimeMs !== before.ctimeMs || finalName.ino !== before.ino || finalName.dev !== before.dev ||
+          await realpath(this.dir) !== resolve(this.dir)) throw new Error("company_audit_store_changed_during_read");
+      return buffer.subarray(0, bytes).toString("utf8");
+    } finally { await handle.close(); }
   }
 
   private async openVerifiedAppend(): Promise<FileHandle> {
@@ -190,7 +218,18 @@ export class CompanyAuditStore {
         throw new Error("company_audit_store_not_bounded");
       }
 
-      const raw = await handle.readFile("utf8");
+      const buffer = Buffer.alloc(stat.size + 1);
+      let bytes = 0;
+      while (bytes < buffer.length) {
+        const part = await handle.read(buffer, bytes, buffer.length - bytes, bytes);
+        if (!part.bytesRead) break;
+        bytes += part.bytesRead;
+      }
+      const after = await handle.stat();
+      if (bytes !== stat.size || after.size !== stat.size || after.mtimeMs !== stat.mtimeMs || after.ctimeMs !== stat.ctimeMs) {
+        throw new Error("company_audit_store_changed_during_read");
+      }
+      const raw = buffer.subarray(0, bytes).toString("utf8");
       const lines = this.parseVerifiedLines(raw);
       const previous = lines.at(-1)?.eventHash ?? "GENESIS";
 

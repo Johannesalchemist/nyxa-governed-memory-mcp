@@ -1,3 +1,4 @@
+import { CompanyAuthority, type CompanyAuthorityDecision } from "./governance/companyAuthority.js";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -481,11 +482,13 @@ export class NyxaGovernedMemoryServer {
   private readonly selfModel: SelfModelStore;
   private readonly candidateStore: CandidateStore;
   private readonly companyAuditStore: CompanyAuditStore;
+  private readonly companyAuthority: CompanyAuthority;
   private readonly humanGrantStore: HumanGrantStore;
   private readonly mandateStore: MandateStore;
 
   public constructor() {
     this.config = loadConfig();
+    this.companyAuthority = new CompanyAuthority([this.config.dataDir, ...this.config.connector.roots.map(root => root.path)]);
     this.auditLog = new AuditLog(this.config.dataDir);
     this.writerLock = new WriterLock(this.config.dataDir);
     this.replayGuard = new ReplayGuard(this.config.dataDir);
@@ -590,7 +593,7 @@ export class NyxaGovernedMemoryServer {
 
       const allTools = [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...MEMORY_TOOLS, companyAuditReadTool, ...HUMAN_AUTHORITY_TOOLS, ...OBSERVABILITY_TOOLS];
       const profile = this.config.toolProfile;
-      return { tools: profile.active ? allTools.filter((tool) => profile.allowed.has(tool.name)) : allTools };
+      return { tools: allTools.filter(tool => (!profile.active || profile.allowed.has(tool.name)) && this.companyAuthority.permitsTool(tool.name)) };
     });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -607,6 +610,12 @@ export class NyxaGovernedMemoryServer {
       if (!isToolAllowedByProfile(this.config.toolProfile, name)) {
         await this.auditProfileDenied(name);
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+      }
+
+      if (!this.companyAuthority.permitsTool(name)) {
+        const authority = { allowed: false, domain: "TENANT_AUTHORITY" as const, reason: "company_session_tool_denied", principal: this.companyAuthority.principalId };
+        await this.auditCompanyAuthority(name, name, authority);
+        return toolJsonResult({ policy_decision: "DENY", ...authority }, true);
       }
 
       if (name === "system.status") {
@@ -801,6 +810,12 @@ export class NyxaGovernedMemoryServer {
       );
     }
 
+    if (this.companyAuthority.restrictsSession && proposal.action !== "nyxa_company_audit_record") {
+      const authority = { allowed: false, domain: "TENANT_AUTHORITY" as const, reason: "company_session_action_denied", principal: this.companyAuthority.principalId };
+      await this.auditCompanyAuthority("nyxa_propose_action", proposal.target, authority);
+      return toolJsonResult({ policy_decision: "DENY", ...authority }, true);
+    }
+
     const affectedResource = safeResource(proposal.action, { target: proposal.target });
 
     // C0 -- Target Safety (governance/c0.ts): runs BEFORE gamma's C1-C5, never after and never
@@ -824,6 +839,19 @@ export class NyxaGovernedMemoryServer {
         { policy_decision: "DENY", domain: "C0", reason: c0.reason, proposed_action: proposal.action },
         true
       );
+    }
+
+    if (proposal.action === "nyxa_company_audit_record") {
+      const parsed = AuditObservationInputSchema.safeParse(proposal.payload);
+      const resource = parsed.success ? parsed.data : undefined;
+      const canonical = resource ? `company-audit:/tenant/${resource.tenant_id}/organization/${resource.organization_id}/audit/${resource.audit_id}` : undefined;
+      const authority = resource && proposal.target === canonical
+        ? await this.companyAuthority.check(resource, "write")
+        : { allowed: false, domain: "TENANT_AUTHORITY" as const, reason: "company_audit_target_or_payload_invalid", principal: this.companyAuthority.principalId };
+      if (!authority.allowed) {
+        await this.auditCompanyAuthority("nyxa_propose_action", proposal.target, authority);
+        return toolJsonResult({ policy_decision: "DENY", ...authority }, true);
+      }
     }
 
     const toolPolicy = TOOL_POLICIES[proposal.action];
@@ -1250,6 +1278,10 @@ export class NyxaGovernedMemoryServer {
       );
     }
 
+    const authority = await this.companyAuthority.check(resource, "read");
+    await this.auditCompanyAuthority("nyxa_company_audit_read", `company-audit:/tenant/${tenantId}/organization/${organizationId}/audit/${auditId}`, authority);
+    if (!authority.allowed) return toolJsonResult({ policy_decision: "DENY", ...authority }, true);
+
     try {
       const observations = await this.companyAuditStore.readAudit(
         tenantId,
@@ -1267,7 +1299,7 @@ export class NyxaGovernedMemoryServer {
         count: observations.length,
         observations,
         epistemic_notice:
-          "FACT denotes the recorded epistemic classification; independent verification is represented separately by evidence_status."
+          "epistemic_type, source, speaker, confidence and evidence_status are caller assertions, not server verification. writtenBy on new governed records is the launcher-bound principal; historical records may contain caller-provided writtenBy."
       });
     } catch {
       await this.audit("blocked", "nyxa_company_audit_read", {
@@ -1583,12 +1615,16 @@ export class NyxaGovernedMemoryServer {
     decision: GammaDecision
   ): Promise<ToolResultPayload> {
     const input = AuditObservationInputSchema.parse(proposal.payload ?? {});
+    // Recheck immediately before the append; a revoked membership cannot reuse an earlier ALLOW.
+    const authority = await this.companyAuthority.check(input, "write");
+    await this.auditCompanyAuthority("nyxa_propose_action", proposal.target, authority);
+    if (!authority.allowed) throw new ConnectorError(authority.reason, "Company authority denied.", "DENIED");
 
     const record = await this.companyAuditStore.writeObservation(
       proposal.target,
       input,
       {
-        writtenBy: proposal.provenance.requestingIdentity,
+        writtenBy: authority.principal!,
         taskId: proposal.provenance.taskId,
         runId: proposal.provenance.runId
       },
@@ -1958,7 +1994,10 @@ export class NyxaGovernedMemoryServer {
       return toolJsonResult({ error: "policy_blocked", reason: decision.reason, tool: "audit.trace" }, true);
     }
     await this.audit("allowed", "audit.trace", { input });
-    const events = await this.auditLog.recent(normalizeAuditTraceLimit(input));
+    const recent = await this.auditLog.recent(normalizeAuditTraceLimit(input));
+    const events = this.companyAuthority.restrictsSession
+      ? recent.filter(event => event.action === "company.authority" && event.requesting_identity === this.companyAuthority.principalId)
+      : recent;
     const integrity = await this.auditLog.verifyIntegrity();
     return toolJsonResult({ ...buildAuditTrace(events), integrity });
   }
@@ -2036,6 +2075,17 @@ export class NyxaGovernedMemoryServer {
         error: { code: safeError.code, message: safeError.publicMessage }
       }, true);
     }
+  }
+
+  private async auditCompanyAuthority(tool: string, target: string, authority: CompanyAuthorityDecision): Promise<void> {
+    await this.auditLog.append({
+      id: randomUUID(), timestamp: new Date().toISOString(), actor: "mcp", action: "company.authority",
+      tool, mode: this.config.agentMode, backend: this.config.memoryBackend,
+      result: authority.allowed ? "allowed" : "blocked",
+      policy_decision: authority.allowed ? "ALLOWED" : "DENIED",
+      affected_resource: target, requesting_identity: authority.principal ?? "unavailable:stdio",
+      result_status: authority.reason, details: { domain: authority.domain, reason: authority.reason, principal: authority.principal }
+    });
   }
 
   private async auditConnector(
