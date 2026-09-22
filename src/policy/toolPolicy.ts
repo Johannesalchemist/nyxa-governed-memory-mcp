@@ -56,6 +56,19 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   // real risk, and that action is checked against its OWN ToolPolicy, not this one.
   nyxa_propose_action: readPolicy("nyxa_propose_action"),
 
+  // Newsroom: bounded external model consultation.
+  // External responses are evidence only and never authority.
+  // Reachable only through nyxa_propose_action -> Gamma -> E0 -> ExecutionGate.
+  nyxa_newsroom_consult: {
+    toolName: "nyxa_newsroom_consult",
+    minimumMode: "draft",
+    writesAuthoritativeMemory: false,
+    requiresHumanApproval: false,
+    executionRisk: "low",
+    allowedInV01: true,
+    capabilityClass: "I1"
+  },
+
   // Self-model reads are always I0 (safe, side-effect-free).
   nyxa_self_model_read: readPolicy("nyxa_self_model_read"),
 

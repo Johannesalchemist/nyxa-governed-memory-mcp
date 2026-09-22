@@ -37,6 +37,8 @@ import { resolveEffectRadius } from "./governance/effectResolver.js";
 import { evaluateC0, type C0Decision } from "./governance/c0.js";
 import { SelfModelStore } from "./self-model/store.js";
 import { CandidateStore } from "./memory/candidateStore.js";
+import { LearningEvidenceStore } from "./cognitive/learningEvidenceStore.js";
+import { consultNewsroom, parseNewsroomInput } from "./cognitive/newsroom.js";
 import { CompanyAuditStore } from "./company-audit/store.js";
 import { AuditObservationInputSchema } from "./schema/companyAudit.js";
 import { deriveDreamCandidate } from "./memory/dreamTrigger.js";
@@ -481,6 +483,7 @@ export class NyxaGovernedMemoryServer {
   private readonly rateLimiter: RateLimiter;
   private readonly selfModel: SelfModelStore;
   private readonly candidateStore: CandidateStore;
+  private readonly learningEvidenceStore: LearningEvidenceStore;
   private readonly companyAuditStore: CompanyAuditStore;
   private readonly companyAuthority: CompanyAuthority;
   private readonly humanGrantStore: HumanGrantStore;
@@ -498,6 +501,7 @@ export class NyxaGovernedMemoryServer {
     this.rateLimiter = new RateLimiter(this.config.connector.limits.rateLimitPerMinute);
     this.selfModel = new SelfModelStore(this.config.dataDir);
     this.candidateStore = new CandidateStore(this.config.dataDir);
+    this.learningEvidenceStore = new LearningEvidenceStore(this.config.dataDir);
     this.companyAuditStore = new CompanyAuditStore(this.config.dataDir);
     this.humanGrantStore = new HumanGrantStore(this.config.dataDir);
     this.mandateStore = new MandateStore(this.config.dataDir);
@@ -521,6 +525,7 @@ export class NyxaGovernedMemoryServer {
     await this.auditLog.init();
     await this.selfModel.init();
     await this.candidateStore.init();
+    await this.learningEvidenceStore.init();
     await this.companyAuditStore.init();
     await this.humanGrantStore.init();
     await this.mandateStore.init();
@@ -888,6 +893,19 @@ export class NyxaGovernedMemoryServer {
       ? await this.candidateStore.pendingAppendRadius(proposal.target, proposal.payload)
       : undefined;
 
+    // Server-owned effect contract for candidate promotion.
+    // A syntactically valid candidate target is not enough: the server must
+    // independently observe that the candidate exists before assigning the
+    // bounded logical mutation radius of exactly one.
+    let candidatePromotionRadius: number | undefined;
+    if (proposal.action === "nyxa_memory_promote_candidate") {
+      const candidateId = parseMemoryCandidateTarget(proposal.target);
+      if (candidateId) {
+        const candidate = await this.candidateStore.getLatestCandidate(candidateId);
+        if (candidate) candidatePromotionRadius = 1;
+      }
+    }
+
     // Server-owned effect contract for one governed belief-record write.
     // Do not trust a caller-supplied radius. The radius becomes known only when the
     // canonical target and the exact record shape accepted by executeSelfModelWrite
@@ -975,6 +993,20 @@ export class NyxaGovernedMemoryServer {
         break;
     }
 
+    // Newsroom effect radius is server-derived from the validated
+    // allowlisted participant set. Caller cannot self-report effect radius.
+    let newsroomRadius: number | undefined;
+    if (proposal.action === "nyxa_newsroom_consult") {
+      try {
+        const newsroomInput = parseNewsroomInput(proposal.payload);
+        if (proposal.target === "newsroom:/consultation") {
+          newsroomRadius = newsroomInput.participants.length;
+        }
+      } catch {
+        newsroomRadius = undefined;
+      }
+    }
+
     const companyAuditRadius =
       proposal.action === "nyxa_company_audit_record"
         ? await this.companyAuditStore.observationAppendRadius(
@@ -984,7 +1016,11 @@ export class NyxaGovernedMemoryServer {
         : undefined;
 
     const trustedEffectRadius =
-      pendingAppendRadius ?? selfModelWriteRadius ?? companyAuditRadius;
+      pendingAppendRadius ??
+      candidatePromotionRadius ??
+      selfModelWriteRadius ??
+      companyAuditRadius ??
+      newsroomRadius;
 
     const effect = resolveEffectRadius(
       proposal.action,
@@ -1087,6 +1123,87 @@ export class NyxaGovernedMemoryServer {
         },
         true
       );
+    }
+
+    // Learning-promotion evidence gate. Generated cognitive candidates require
+    // server-owned Co-Cogitation evidence before they may cross the promotion
+    // boundary. This gate has NO authority effect: it may only HOLD.
+    //
+    // Deliberately runs after E0 but before ExecutionGate, ReplayGuard and human
+    // grant consumption. A HOLD therefore causes no effect and burns no grant.
+    if (proposal.action === "nyxa_memory_promote_candidate") {
+      const candidateId = parseMemoryCandidateTarget(proposal.target);
+
+      if (candidateId) {
+        const candidate = await this.candidateStore.getLatestCandidate(candidateId);
+
+        const requiresLearningEvidence =
+          candidate !== undefined &&
+          (
+            candidate.candidate_type === "dream_summary" ||
+            candidate.source === "dream" ||
+            candidate.source === "agent" ||
+            candidate.source === "assistant"
+          );
+
+        if (requiresLearningEvidence) {
+          let learningGate;
+
+          try {
+            learningGate = await this.learningEvidenceStore.assessCandidate(candidateId);
+          } catch {
+            learningGate = {
+              eligible: false,
+              authorityEffect: "NONE" as const,
+              reason: "co_cogitation_hold" as const,
+              assessment: {
+                driftScore: 1,
+                humanAiDriftScore: 0,
+                independentLineages: 0,
+                sharedSourceRatio: 1,
+                epistemicResetRequired: true,
+                learningEligible: false,
+                reasons: ["learning_evidence_unavailable"]
+              }
+            };
+          }
+
+          if (!learningGate.eligible) {
+            await this.auditGovernance(
+              "blocked",
+              toolPolicy?.capabilityClass,
+              "HELD",
+              started,
+              "co_cogitation_insufficient",
+              affectedResource,
+              { outcome: decision.outcome, domain: decision.domain, reason: decision.reason },
+              undefined,
+              c0,
+              humanGrantCheck,
+              epistemic.ran && !epistemic.failed
+                ? { classification: epistemic.result.classification, hold: false }
+                : undefined
+            );
+
+            return toolJsonResult(
+              {
+                policy_decision: "HELD",
+                reason: "co_cogitation_insufficient",
+                proposed_action: proposal.action,
+                learning_gate: {
+                  authority_effect: learningGate.authorityEffect,
+                  reasons: learningGate.assessment.reasons,
+                  drift_score: learningGate.assessment.driftScore,
+                  human_ai_drift_score: learningGate.assessment.humanAiDriftScore,
+                  independent_lineages: learningGate.assessment.independentLineages,
+                  shared_source_ratio: learningGate.assessment.sharedSourceRatio
+                }
+              },
+              true
+            );
+          }
+        }
+      }
     }
 
     // Execution budget/rate/external-policy gate: runs after authority + epistemic checks but
@@ -1582,6 +1699,17 @@ export class NyxaGovernedMemoryServer {
         return await this.executePromoteCandidate(proposal, decision);
       case "nyxa_company_audit_record":
         return await this.executeCompanyAuditRecord(proposal, decision);
+      case "nyxa_newsroom_consult": {
+        if (proposal.target !== "newsroom:/consultation") {
+          throw new ConnectorError(
+            "newsroom_target_invalid",
+            "Newsroom consultation requires canonical target newsroom:/consultation.",
+            "DENIED"
+          );
+        }
+        const newsroomInput = parseNewsroomInput(proposal.payload);
+        return await consultNewsroom(newsroomInput);
+      }
       case "nyxa_e2e_write_scratch":
       case "nyxa_e2e_escalate_scratch":
         return await this.executeE2EScratchWrite(proposal);
