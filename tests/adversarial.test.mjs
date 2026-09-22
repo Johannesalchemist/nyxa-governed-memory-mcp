@@ -203,3 +203,45 @@ test("failed post-patch verification restores exact content", async () => {
   await assert.rejects(() => connector.applyPatch("dev:/README.md", patch), /test_failed/);
   assert.equal(await readFile(join(root, "README.md"), "utf8"), "before\n");
 });
+
+test("existing untracked development file can be patched, backed up and verified", async () => {
+  const root = await mkdtemp(join(tmpdir(), "nyxa-untracked-patch-"));
+
+  // initializeRepository expects these baseline files to exist.
+  await writeFile(join(root, "README.md"), "baseline\n", { mode: 0o644 });
+  await writeFile(
+    join(root, "verify.mjs"),
+    "import{readFileSync}from'node:fs';if(readFileSync('UNTRACKED.md','utf8')!=='after\\n')process.exit(1);\n"
+  );
+
+  await initializeRepository(root);
+
+  // Target deliberately appears only after repository initialization.
+  // Therefore it exists on disk but is not tracked by Git.
+  await writeFile(join(root, "UNTRACKED.md"), "before\n", { mode: 0o644 });
+
+  const connector = new SecureConnector(
+    patchConfig(root, ["verify.mjs"]),
+    join(root, "audit-data")
+  );
+
+  const patch = [
+    "diff --git a/UNTRACKED.md b/UNTRACKED.md",
+    "--- a/UNTRACKED.md",
+    "+++ b/UNTRACKED.md",
+    "@@ -1 +1 @@",
+    "-before",
+    "+after",
+    ""
+  ].join("\n");
+
+  const result = await connector.applyPatch("dev:/UNTRACKED.md", patch);
+
+  assert.equal(result.policy_decision, "ALLOWED");
+  assert.equal(
+    await readFile(join(root, "UNTRACKED.md"), "utf8"),
+    "after\n"
+  );
+  assert.ok(result.data.backup_id);
+  assert.match(result.data.preexisting_target_state, /^\?\? /m);
+});
