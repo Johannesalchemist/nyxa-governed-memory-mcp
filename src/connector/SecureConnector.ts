@@ -422,7 +422,7 @@ export class SecureConnector {
     const check = await this.runGit(repository, ["apply", "--check", "--recount", "--whitespace=error-all", "-"], patch);
     if (check.exitCode !== 0) throw new ConnectorError("patch_check_failed", "Patch failed deterministic preflight.", "INVALID");
     const applied = await this.runGit(repository, ["apply", "--recount", "--whitespace=error-all", "-"], patch);
-    if (applied.exitCode !== 0) throw new ConnectorError("patch_apply_failed", "Patch could not be applied.", "INVALID");
+    if (applied.exitCode !== 0) throw new ConnectorError("patch_apply_failed", "Patch passed preflight but apply failed. exit=" + applied.exitCode + " stderr=" + applied.stderr.slice(0, 500), "INVALID");
 
     try {
       const postTarget = target.root.postPatchTarget;
