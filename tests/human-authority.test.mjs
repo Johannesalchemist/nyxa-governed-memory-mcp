@@ -65,7 +65,7 @@ async function storeCandidate(client, overrides = {}) {
     payload: {
       content: "step11 candidate fixture",
       candidate_type: "observation",
-      source: "agent",
+      source: "user",
       scope: "project",
       purpose: "step11 human-authority E2E fixture",
       confidence: 0.9,
@@ -447,4 +447,190 @@ test("AUDIT: chain integrity + every distinct layer present and correlated for t
 
   const grantIssueEvent = events.find((e) => e.tool === "nyxa_human_grant_issue" && e.result === "allowed");
   assert.ok(grantIssueEvent, "the grant issuance itself must be present in the audit chain");
+});
+
+
+// ---- I. COGNITIVE LEARNING PROMOTION BOUNDARY ----
+// A valid human grant authorizes the requested capability, but it does not
+// manufacture epistemic independence. A generated cognitive candidate without
+// server-owned LearningEvidence must therefore HOLD before ReplayGuard and
+// before grant consumption. The SAME grant must remain usable once independent
+// evidence is supplied.
+test("I: valid human grant + E0 pass cannot override missing Co-Cogitation evidence; same grant remains usable after evidence arrives", async (context) => {
+  const { client, dataDir } = await spawnServer();
+  context.after(async () => client.close());
+
+  // Seed a generated cognitive candidate directly as isolated fixture setup.
+  // This is deliberately NOT evidence that the MCP write path authorized it.
+  const { CandidateStore } = await import("../dist/memory/candidateStore.js");
+  const candidateStore = new CandidateStore(dataDir);
+  await candidateStore.init();
+
+  const candidate = await candidateStore.writeCandidate(
+    {
+      content: "generated cognitive candidate requiring independent evidence",
+      candidate_type: "dream_summary",
+      source: "dream",
+      scope: "project",
+      purpose: "learning-promotion boundary E2E",
+      confidence: 0.9,
+      importance: 0.8
+    },
+    {
+      writtenBy: "fixture",
+      taskId: "learning-gate-fixture",
+      runId: "learning-gate-fixture"
+    },
+    {
+      outcome: "ALLOW",
+      domain: null,
+      reason: "explicit isolated test fixture"
+    }
+  );
+
+  const grant = await issueGrant(client, { targetId: candidate.id });
+  assert.ok(grant.parsed.grant_id);
+
+  const firstProposal = baseProposal({
+    target: `memory-candidate:/${candidate.id}`,
+    claims: [
+      { tag: "EXTERNAL_EVIDENCE", statement: "primary evidence A", source: "source-a", asOf: new Date().toISOString() },
+      { tag: "EXTERNAL_EVIDENCE", statement: "primary evidence B", source: "source-b", asOf: new Date().toISOString() }
+    ],
+    uncertainty: 0.2,
+    payload: { humanGrant: { grantId: grant.parsed.grant_id } },
+    provenance: {
+      taskId: "learning-gate-promote",
+      runId: "attempt-before-evidence",
+      requestingIdentity: "Jo"
+    }
+  });
+
+  const held = parse(await client.callTool({
+    name: "nyxa_propose_action",
+    arguments: { proposal: firstProposal }
+  }));
+
+  assert.equal(held.policy_decision, "HELD");
+  assert.equal(held.reason, "co_cogitation_insufficient");
+  assert.equal(held.learning_gate.authority_effect, "NONE");
+  assert.ok(
+    held.learning_gate.reasons.includes("learning_evidence_missing"),
+    "missing server-owned learning evidence must be explicit"
+  );
+
+  let lines = await readCandidatesJsonl(dataDir);
+  assert.equal(
+    lines.filter(l => l.id === candidate.id).at(-1).status,
+    "pending",
+    "HELD promotion must have no candidate effect"
+  );
+  assert.equal(
+    lines.filter(l => l.id === candidate.id).length,
+    1,
+    "HELD promotion must append no promoted candidate state"
+  );
+
+  // Add server-owned evidence out of band as isolated fixture setup.
+  // The promotion request itself still cannot supply or forge this evidence.
+  const { LearningEvidenceStore } =
+    await import("../dist/cognitive/learningEvidenceStore.js");
+
+  const learningStore = new LearningEvidenceStore(dataDir);
+  await learningStore.init();
+
+  const contribution = (id, role, source, modelId, promptHash) => ({
+    id,
+    role,
+    origin: "AI",
+    claims: [{
+      tag: "EXTERNAL_EVIDENCE",
+      statement: `independent-${id}`,
+      source
+    }],
+    modelId,
+    promptHash,
+    parentIds: []
+  });
+
+  await learningStore.append(
+    {
+      candidateId: candidate.id,
+      contributions: [
+        contribution("explore-1", "EXPLORE", "source-a", "model-a", "prompt-a"),
+        contribution("challenge-1", "CHALLENGE", "source-b", "model-b", "prompt-b"),
+        contribution(
+          "alternative-1",
+          "INDEPENDENT_ALTERNATIVE",
+          "source-c",
+          "model-c",
+          "prompt-c"
+        )
+      ],
+      humanAiSignal: {
+        agreementDelta: 0.2,
+        independentEvidenceDelta: 0.8
+      }
+    },
+    {
+      writtenBy: "fixture",
+      taskId: "learning-evidence-fixture",
+      runId: "learning-evidence-fixture"
+    }
+  );
+
+  // Retry the EXACT SAME proposal after evidence arrives.
+  // ALLOW now proves both:
+  // 1. the earlier HOLD did not reserve ReplayGuard state, and
+  // 2. the earlier HOLD did not consume the human grant.
+  const promoted = parse(await client.callTool({
+    name: "nyxa_propose_action",
+    arguments: { proposal: firstProposal }
+  }));
+
+  assert.equal(
+    promoted.policy_decision,
+    "ALLOW",
+    "same human grant must remain usable after the earlier epistemic HOLD"
+  );
+  assert.equal(promoted.result.status, "promoted");
+
+  lines = await readCandidatesJsonl(dataDir);
+  const candidateLines = lines.filter(l => l.id === candidate.id);
+
+  assert.equal(candidateLines.length, 2);
+  assert.equal(candidateLines[0].status, "pending");
+  assert.equal(candidateLines.at(-1).status, "promoted");
+
+  // Now the successful effect must have consumed the grant.
+  const third = parse(await client.callTool({
+    name: "nyxa_propose_action",
+    arguments: {
+      proposal: baseProposal({
+        target: `memory-candidate:/${candidate.id}`,
+        claims: [
+          { tag: "EXTERNAL_EVIDENCE", statement: "primary evidence A", source: "source-a", asOf: new Date().toISOString() },
+          { tag: "EXTERNAL_EVIDENCE", statement: "primary evidence B", source: "source-b", asOf: new Date().toISOString() }
+        ],
+        uncertainty: 0.2,
+        payload: { humanGrant: { grantId: grant.parsed.grant_id } },
+        provenance: {
+          taskId: "learning-gate-promote",
+          runId: "attempt-after-success",
+          requestingIdentity: "Jo"
+        }
+      })
+    }
+  }));
+
+  assert.equal(third.policy_decision, "DENY");
+  assert.equal(third.domain, "C2");
+  assert.equal(third.reason, "human_grant_already_consumed");
+
+  const afterReplay = await readCandidatesJsonl(dataDir);
+  assert.equal(
+    afterReplay.filter(l => l.id === candidate.id).length,
+    2,
+    "consumed grant must never create a second promotion effect"
+  );
 });
