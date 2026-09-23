@@ -88,3 +88,29 @@ test("malformed newsroom result fails closed", () => {
     /control_room_contribution_invalid/
   );
 });
+
+test("envelope preserves newsroom evidence and adds projected control-room state", async () => {
+  const { buildControlRoomEnvelope } =
+    await import("../dist/cognitive/controlRoom.js");
+
+  const newsroom = {
+    task_id: "task-envelope",
+    modality: "text",
+    requested_participants: ["claude"],
+    successful_participants: ["claude"],
+    contributions: [contribution],
+    anti_phantom_pass: true,
+    synthesis_status: "not_performed",
+    dissent_assessment_status: "not_performed",
+    authority_effect: "NONE",
+    evidence_only: true
+  };
+
+  const envelope = buildControlRoomEnvelope(newsroom);
+
+  assert.equal(envelope.newsroom, newsroom);
+  assert.equal(envelope.control_room.task_id, "task-envelope");
+  assert.equal(envelope.control_room.synthesis_status, "not_performed");
+  assert.equal(envelope.control_room.authority_effect, "NONE");
+  assert.equal(envelope.control_room.participants[0].request_id, "req-1");
+});

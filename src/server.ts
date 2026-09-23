@@ -39,6 +39,7 @@ import { SelfModelStore } from "./self-model/store.js";
 import { CandidateStore } from "./memory/candidateStore.js";
 import { LearningEvidenceStore } from "./cognitive/learningEvidenceStore.js";
 import { consultNewsroom, parseNewsroomInput } from "./cognitive/newsroom.js";
+import { buildControlRoomEnvelope } from "./cognitive/controlRoom.js";
 import { CompanyAuditStore } from "./company-audit/store.js";
 import { AuditObservationInputSchema } from "./schema/companyAudit.js";
 import { deriveDreamCandidate } from "./memory/dreamTrigger.js";
@@ -1708,7 +1709,10 @@ export class NyxaGovernedMemoryServer {
           );
         }
         const newsroomInput = parseNewsroomInput(proposal.payload);
-        return await consultNewsroom(newsroomInput);
+        const newsroomResult = await consultNewsroom(newsroomInput);
+        return buildControlRoomEnvelope(
+          newsroomResult as unknown as Record<string, unknown>
+        );
       }
       case "nyxa_e2e_write_scratch":
       case "nyxa_e2e_escalate_scratch":

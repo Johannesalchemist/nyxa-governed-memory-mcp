@@ -96,3 +96,17 @@ export function projectControlRoomSession(
     evidence_only: result["evidence_only"] === true
   };
 }
+
+export type ControlRoomEnvelope = {
+  newsroom: Record<string, unknown>;
+  control_room: ControlRoomSession;
+};
+
+export function buildControlRoomEnvelope(
+  result: Record<string, unknown>
+): ControlRoomEnvelope {
+  return {
+    newsroom: result,
+    control_room: projectControlRoomSession(result)
+  };
+}
