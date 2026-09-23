@@ -11,6 +11,7 @@ export function buildSystemStatus(config) {
         version: config.version,
         agent_mode: config.agentMode,
         backend: config.memoryBackend,
+        feature_flags_semantics: "Configured switches only; effective authorization additionally depends on mode, tool profile, policy, governance and connector constraints.",
         feature_flags: {
             dreaming_enabled: config.featureFlags.dreamingEnabled,
             apprentice_enabled: config.featureFlags.apprenticeEnabled,
