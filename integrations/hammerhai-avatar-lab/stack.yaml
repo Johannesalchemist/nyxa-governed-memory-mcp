@@ -1,0 +1,17 @@
+version: 1
+project: nyxa-hammerhai-avatar-lab
+profiles: [dev, hammerhai]
+services:
+  gateway: {image: nyxa/avatar-gateway:pending, gpu: false}
+  realtime-avatar: {image: nyxa/realtime-avatar:pending, gpu: true}
+  newsroom: {image: nyxa/newsroom:pending, gpu: true}
+  media-forensics: {image: nyxa/media-forensics:pending, gpu: true}
+  experiment-runner: {image: nyxa/experiment-runner:pending, gpu: true}
+  sapio-bridge: {image: nyxa/sapio-bridge:pending, gpu: false}
+  evidence-store: {image: postgres:17-alpine, gpu: false}
+policy:
+  authority: proposal_effect_gate
+  authoritative_writes: false
+  synthetic_identity_disclosure: required
+  optimize_for: [voluntary_return, constructive_comments, curiosity, conversation_quality, long_term_retention]
+  prohibit: [ragebait, fear_optimization, vulnerability_targeting, covert_identity_deception]

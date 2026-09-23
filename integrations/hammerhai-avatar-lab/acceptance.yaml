@@ -1,0 +1,20 @@
+checks:
+  - gpu_visible
+  - storage_writable
+  - model_cache_persistent
+  - realtime_roundtrip_measured
+  - full_body_motion_pipeline
+  - lipsync_av_sync_measured
+  - character_identity_consistency
+  - newsroom_cross_model_evidence
+  - media_forensics_provenance
+  - nyxa_proposal_effect_receipt
+  - sapio_opt_in_boundary
+  - synthetic_avatar_disclosure
+  - experiment_metrics_no_rage_or_fear_objective
+artifacts:
+  - environment.json
+  - benchmark.json
+  - provenance.jsonl
+  - governance-receipts.jsonl
+  - experiment-protocol.json
