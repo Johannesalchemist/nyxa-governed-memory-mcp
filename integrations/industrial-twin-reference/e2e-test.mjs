@@ -1,0 +1,14 @@
+import fs from 'node:fs'; import assert from 'node:assert/strict';
+import {stableAsset,detectChange} from './world-model.mjs'; import {govern} from './govern.mjs';
+const policy=JSON.parse(fs.readFileSync(new URL('./effect-policy.json',import.meta.url)));
+const now=new Date('2026-09-25T16:40:00Z');
+const mk=(id,pos,confidence=.98,accuracyMm=30)=>({observationId:id,assetId:'ASSET-001',source:'iphone_lidar',observedAt:'2026-09-25T16:39:30Z',geometry:{position:pos,accuracyMm},confidence,coverage:.9,provenance:{producer:'test',device:'phone'},evidence:{hash:'sha256:test-'+id}});
+const before=mk('obs-1',[0,0,0]); const after=mk('obs-2',[1200,0,0]);
+const asset=stableAsset([before,after]); assert.equal(asset.assetId,'ASSET-001');
+const change=detectChange(asset); assert(change); assert.equal(Math.round(change.displacementMm),1200); assert.equal(change.status,'PROPOSED');
+const show=govern('SHOW_LOCATION',after,policy,now); assert.equal(show.decision,'ALLOW');
+const robot=govern('ROBOT_MOVE',after,policy,now); assert.equal(robot.decision,'DENY'); assert(robot.failures.includes('ACCURACY')); assert(robot.failures.includes('CONFIDENCE'));
+const unknown=govern('UNREGISTERED_EFFECT',after,policy,now); assert.equal(unknown.decision,'DENY');
+const report={assetId:asset.assetId,change,SHOW_LOCATION:show,ROBOT_MOVE:robot,UNREGISTERED_EFFECT:unknown};
+fs.writeFileSync(new URL('./evidence-e2e.json',import.meta.url),JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify(report,null,2)); console.log('PASS: identity + change candidate + effect-relative ALLOW/DENY');

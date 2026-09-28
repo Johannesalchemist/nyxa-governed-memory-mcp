@@ -1,0 +1,6 @@
+import test from"node:test";import assert from"node:assert/strict";import{projectDomain}from"../dist/epistemic/domainProjection.js";
+const domains=["INDUSTRIAL_TWIN","AGENT_GOVERNANCE","LEARNING","WORLD_TWIN"];
+const obs=(domain,id,t,res,rels,prov,impact=.4,p="observer")=>({id,domain,at_ms:t,meaning_space_id:"shared-hidden-dependency",perspective:p,residual:res,valence:.8,relation_refs:rels,provenance_roots:prov,impact});
+test("same kernel projects across four experience domains without domain-specific truth rules",()=>{for(const d of domains){const x=projectDomain([obs(d,"1",0,.6,["R1"],["P1"]),obs(d,"2",1000,.4,["R1","R2"],["P1","P2"])]);assert.equal(x.domain,d);assert.ok(x.kpis.dimensional_gain>0);assert.equal(x.kpis.independent_provenance_gain,1)}});
+test("high-impact unresolved state requests human gate in every domain",()=>{for(const d of domains){const x=projectDomain([obs(d,"1",0,.7,["R1"],["P1"],.9),obs(d,"2",1000,.7,["R1"],["P1"],.9)]);assert.equal(x.requires_human_gate,true);assert.equal(x.kpis.classification,"STAGNANT_LOOP")}});
+test("cross-domain observations cannot be silently mixed",()=>{assert.throws(()=>projectDomain([obs(domains[0],"1",0,.4,["R1"],["P1"]),obs(domains[1],"2",1,.3,["R2"],["P2"])]),/mixed_domains/)})

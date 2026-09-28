@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "principle": "effect-relative-evidence",
+  "effects": {
+    "SHOW_LOCATION": {"minConfidence": 0.70, "maxAccuracyMm": 250, "maxAgeSeconds": 2592000, "onFailure": "ESCALATE"},
+    "PROPOSE_TWIN_UPDATE": {"minConfidence": 0.85, "maxAccuracyMm": 100, "maxAgeSeconds": 604800, "onFailure": "ESCALATE"},
+    "CREATE_MAINTENANCE_WORK_ORDER": {"minConfidence": 0.95, "maxAccuracyMm": 50, "maxAgeSeconds": 86400, "onFailure": "ESCALATE"},
+    "ROBOT_MOVE": {"minConfidence": 0.995, "maxAccuracyMm": 5, "maxAgeSeconds": 60, "onFailure": "DENY"}
+  }
+}

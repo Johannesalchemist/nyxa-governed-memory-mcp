@@ -1,0 +1,141 @@
+{
+  "twin": {
+    "assetId": "CNC-017",
+    "bom": [
+      "spindle",
+      "fixture"
+    ],
+    "simulation": {
+      "assetId": "CNC-017",
+      "scenario": "MOVE_ASSET",
+      "baseline": {
+        "capacity": 100,
+        "cost": 120,
+        "margin": 80
+      },
+      "projected": {
+        "capacity": 105,
+        "cost": 117.6,
+        "margin": 82.4
+      }
+    }
+  },
+  "change": {
+    "assetId": "CNC-017",
+    "type": "POSITION_CHANGE",
+    "fromObservationId": "o1",
+    "toObservationId": "o2",
+    "displacementMm": 1200,
+    "candidateId": "chg-77f8c39e9f64f4dc",
+    "status": "PROPOSED"
+  },
+  "ALLOW": {
+    "dispatch": true,
+    "policy_decision": "PROPOSE_TO_NYXA",
+    "proposal": {
+      "actor": "industrial-twin-agent",
+      "action": "nyxa_e2e_write_scratch",
+      "target": "scratch:/twin-e9d7e34e5cd0dca5ed260a0e.txt",
+      "scope": "industrial twin governed effect",
+      "claims": [
+        {
+          "tag": "FACT",
+          "statement": "effect SHOW_LOCATION requested for CNC-017",
+          "source": "sha256:o2"
+        }
+      ],
+      "uncertainty": 0.020000000000000018,
+      "requestedCapabilityClass": "I1",
+      "estimatedIrreversibility": "I1",
+      "provenance": {
+        "requestingIdentity": "industrial-twin-agent",
+        "taskId": "twin:SHOW_LOCATION:twin-e9d7e34e5cd0dca5ed260a0e",
+        "runId": "windtunnel-001"
+      },
+      "payload": {
+        "effectId": "twin-e9d7e34e5cd0dca5ed260a0e",
+        "effect": "SHOW_LOCATION",
+        "observationId": "o2",
+        "evidenceHash": "sha256:o2",
+        "changeCandidateId": "chg-77f8c39e9f64f4dc"
+      }
+    }
+  },
+  "DENY": {
+    "dispatch": false,
+    "policy_decision": "DENY",
+    "domain": "EFFECT_RELATIVE_EVIDENCE",
+    "reason": "INSUFFICIENT_EFFECT_EVIDENCE",
+    "proposal": {
+      "actor": "industrial-twin-agent",
+      "action": "nyxa_e2e_write_scratch",
+      "target": "scratch:/twin-ae1dd1ad2e0157652c1c4e16.txt",
+      "scope": "industrial twin governed effect",
+      "claims": [
+        {
+          "tag": "FACT",
+          "statement": "effect ROBOT_MOVE requested for CNC-017",
+          "source": "sha256:o2"
+        }
+      ],
+      "uncertainty": 0.020000000000000018,
+      "requestedCapabilityClass": "I1",
+      "estimatedIrreversibility": "I1",
+      "provenance": {
+        "requestingIdentity": "industrial-twin-agent",
+        "taskId": "twin:ROBOT_MOVE:twin-ae1dd1ad2e0157652c1c4e16",
+        "runId": "windtunnel-001"
+      },
+      "payload": {
+        "effectId": "twin-ae1dd1ad2e0157652c1c4e16",
+        "effect": "ROBOT_MOVE",
+        "observationId": "o2",
+        "evidenceHash": "sha256:o2",
+        "changeCandidateId": "chg-77f8c39e9f64f4dc"
+      }
+    }
+  },
+  "ESCALATE": {
+    "dispatch": false,
+    "policy_decision": "ESCALATE",
+    "domain": "EFFECT_RELATIVE_EVIDENCE",
+    "reason": "INSUFFICIENT_EFFECT_EVIDENCE",
+    "proposal": {
+      "actor": "industrial-twin-agent",
+      "action": "nyxa_e2e_write_scratch",
+      "target": "scratch:/twin-9f2d40d4420033e52c9de45a.txt",
+      "scope": "industrial twin governed effect",
+      "claims": [
+        {
+          "tag": "FACT",
+          "statement": "effect CREATE_MAINTENANCE_WORK_ORDER requested for CNC-017",
+          "source": "sha256:o2"
+        }
+      ],
+      "uncertainty": 0.020000000000000018,
+      "requestedCapabilityClass": "I1",
+      "estimatedIrreversibility": "I1",
+      "provenance": {
+        "requestingIdentity": "industrial-twin-agent",
+        "taskId": "twin:CREATE_MAINTENANCE_WORK_ORDER:twin-9f2d40d4420033e52c9de45a",
+        "runId": "windtunnel-001"
+      },
+      "payload": {
+        "effectId": "twin-9f2d40d4420033e52c9de45a",
+        "effect": "CREATE_MAINTENANCE_WORK_ORDER",
+        "observationId": "o2",
+        "evidenceHash": "sha256:o2",
+        "changeCandidateId": "chg-77f8c39e9f64f4dc"
+      }
+    }
+  },
+  "BYPASS": {
+    "attempted": true,
+    "dispatch": false
+  },
+  "REPLAY": {
+    "sameEffectId": true,
+    "effectId": "twin-e9d7e34e5cd0dca5ed260a0e"
+  },
+  "scope": "industrial twin governed effect"
+}

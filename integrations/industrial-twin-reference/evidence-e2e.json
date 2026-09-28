@@ -1,0 +1,38 @@
+{
+  "assetId": "ASSET-001",
+  "change": {
+    "assetId": "ASSET-001",
+    "type": "POSITION_CHANGE",
+    "fromObservationId": "obs-1",
+    "toObservationId": "obs-2",
+    "displacementMm": 1200,
+    "candidateId": "chg-c0abe8d7617f876b",
+    "status": "PROPOSED"
+  },
+  "SHOW_LOCATION": {
+    "decision": "ALLOW",
+    "reason": "EVIDENCE_SUFFICIENT",
+    "metrics": {
+      "ageSeconds": 30,
+      "accuracyMm": 30,
+      "confidence": 0.98
+    }
+  },
+  "ROBOT_MOVE": {
+    "decision": "DENY",
+    "reason": "INSUFFICIENT_EFFECT_EVIDENCE",
+    "failures": [
+      "CONFIDENCE",
+      "ACCURACY"
+    ],
+    "metrics": {
+      "ageSeconds": 30,
+      "accuracyMm": 30,
+      "confidence": 0.98
+    }
+  },
+  "UNREGISTERED_EFFECT": {
+    "decision": "DENY",
+    "reason": "UNKNOWN_EFFECT"
+  }
+}
