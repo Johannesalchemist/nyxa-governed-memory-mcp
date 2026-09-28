@@ -163,6 +163,20 @@ test('compiled MCP: principal binding, tenant/org/audit membership, spoofing, re
   await writeFile(join(base,'authority.json'),'invalid');
   await deny('malformed registry',()=>read(current,A),'authority_registry_invalid');
   await current.close(); current=undefined;
+  // Partial/duplicate launcher bindings are restricted sessions and must fail closed.
+  const badBindings = [
+    ['--company-principal=principal-a'],
+    [`--company-authority-file=${base}/authority.json`],
+    ['--company-principal=principal-a','--company-principal=principal-b',`--company-authority-file=${base}/authority.json`]
+  ];
+  for (const [i,args] of badBindings.entries()) {
+    const home=join(base,`home-bad-${i}`); await mkdir(home);
+    const transport=new StdioClientTransport({command:'/usr/bin/node',args:[resolve('dist/index.js'),...args],cwd:base,env:{PATH:'/usr/bin:/bin',HOME:home,NYXA_DATA_DIR:join(base,'data'),NYXA_AGENT_MODE:'draft',NYXA_MCP_TOOL_PROFILE:'chatgpt_governed_execute'},stderr:'pipe'});
+    const client=new Client({name:'bad-binding',version:'1'}); await client.connect(transport,{timeout:10000});
+    const tools=(await client.listTools()).tools.map(t=>t.name).sort(); assert.deepEqual(tools,['audit.trace','nyxa_company_audit_read','nyxa_propose_action']);
+    const r=parse(await client.callTool({name:'nyxa_company_audit_read',arguments:A})); assert.equal(r.policy_decision,'DENY'); assert.equal(r.reason,'principal_binding_invalid');
+    await client.close();
+  }
   current=await spawnServer(base,null,'unbound');
   await deny('unbound process write',()=>write(current,proposal(A)),'principal_binding_missing');
   await deny('unbound process read',()=>read(current,A),'principal_binding_missing');

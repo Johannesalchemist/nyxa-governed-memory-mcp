@@ -38,7 +38,9 @@ export type CompanyAuthorityDecision = {
  * transaction between an operator replacing the registry and an append syscall.
  */
 export class CompanyAuthority {
-  public readonly restrictsSession = process.argv.slice(2).some(arg => arg.startsWith("--company-principal=") || arg.startsWith("--company-authority-file="));
+  private readonly companyArgs = process.argv.slice(2).filter(arg => arg.startsWith("--company-principal=") || arg.startsWith("--company-authority-file="));
+  public readonly restrictsSession = this.companyArgs.length > 0;
+  private readonly bindingConfigValid: boolean;
   public get principalId(): string | null { return this.principal ?? null; }
   public permitsTool(name: string): boolean {
     return !this.restrictsSession || ["nyxa_company_audit_read", "nyxa_propose_action", "audit.trace"].includes(name);
@@ -52,11 +54,13 @@ export class CompanyAuthority {
     };
     this.principal = option("--company-principal");
     this.file = option("--company-authority-file");
+    this.bindingConfigValid = !this.restrictsSession || (this.companyArgs.length === 2 && !!this.principal && !!this.file);
   }
   public async check(resource: CompanyResource, permission: "read" | "write"): Promise<CompanyAuthorityDecision> {
     const result = (allowed: boolean, reason: string): CompanyAuthorityDecision => ({
       allowed, domain: "TENANT_AUTHORITY", reason, principal: this.principal ?? null
     });
+    if (!this.bindingConfigValid) return result(false, "principal_binding_invalid");
     if (!this.principal || !this.file) return result(false, "principal_binding_missing");
     try {
       if (!isAbsolute(this.file) || await realpath(this.file) !== resolve(this.file)) throw new Error();
