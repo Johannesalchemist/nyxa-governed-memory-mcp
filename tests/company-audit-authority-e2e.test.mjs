@@ -152,6 +152,14 @@ test('compiled MCP: principal binding, tenant/org/audit membership, spoofing, re
   await rename(join(base,'authority-real.json'),join(base,'authority.json'));
   await writeFile(join(base,'authority.json'),' '.repeat(65537));
   await deny('oversize registry rejected',()=>read(current,A),'authority_registry_invalid');
+  const duplicateTenant = structuredClone(registry);
+  duplicateTenant.memberships.push(structuredClone(duplicateTenant.memberships[0]));
+  await writeFile(join(base,'authority.json'),JSON.stringify(duplicateTenant));
+  await deny('duplicate principal tenant binding fails closed',()=>read(current,A),'authority_registry_ambiguous');
+  const duplicateOrg = structuredClone(registry);
+  duplicateOrg.memberships[0].organizations.push(structuredClone(duplicateOrg.memberships[0].organizations[0]));
+  await writeFile(join(base,'authority.json'),JSON.stringify(duplicateOrg));
+  await deny('duplicate organization binding fails closed',()=>read(current,A),'authority_registry_ambiguous');
   await writeFile(join(base,'authority.json'),'invalid');
   await deny('malformed registry',()=>read(current,A),'authority_registry_invalid');
   await current.close(); current=undefined;

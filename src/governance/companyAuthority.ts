@@ -87,8 +87,10 @@ export class CompanyAuthority {
       const entries = registry.parse(JSON.parse(raw));
       const tenants = entries.memberships.filter(m => m.principal === this.principal && m.tenant_id === resource.tenant_id);
       if (!tenants.length) return result(false, "tenant_membership_missing");
+      if (tenants.length !== 1) return result(false, "authority_registry_ambiguous");
       const orgs = tenants.flatMap(m => m.organizations).filter(o => o.organization_id === resource.organization_id);
       if (!orgs.length) return result(false, "organization_scope_denied");
+      if (orgs.length !== 1) return result(false, "authority_registry_ambiguous");
       const audits = orgs.filter(o => o.audit_ids.includes(resource.audit_id));
       if (!audits.length) return result(false, "audit_scope_denied");
       if (!audits.some(o => o.permissions.includes(permission))) return result(false, "permission_denied");
