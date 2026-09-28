@@ -1,5 +1,6 @@
-import test from "node:test"; import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-const p=new URL("../src/compliance/controlLibrary.ts",import.meta.url);
-test("control library is framework-attributed and evidence-linked",async()=>{const s=await readFile(p,"utf8"); for(const x of ["EU_AI_ACT","NIST_AI_RMF","ISO_IEC_42001","ALLOW/DENY/ESCALATE","effect_radius","source"]) assert.ok(s.includes(x));});
-test("library does not claim certification",async()=>{const s=(await readFile(p,"utf8")).toLowerCase(); assert.equal(s.includes("certified"),false);});
+import test from "node:test"; import assert from "node:assert/strict"; import { readFile } from "node:fs/promises";
+const lib=new URL("../src/compliance/controlLibrary.ts",import.meta.url), assess=new URL("../src/compliance/assessment.ts",import.meta.url), pack=new URL("../src/compliance/evidencePackage.ts",import.meta.url);
+test("library covers core frameworks with versioned provenance",async()=>{const s=await readFile(lib,"utf8"); for(const x of ["EU_AI_ACT","NIST_AI_RMF","ISO_IEC_42001","ISO_IEC_23894","GDPR","sourceVersion"]) assert.ok(s.includes(x));});
+test("library encodes NYXA effect evidence and human oversight",async()=>{const s=await readFile(lib,"utf8"); for(const x of ["effect_radius","policy_decision","prevented_effect","human_gate","authority_record"]) assert.ok(s.includes(x));});
+test("assessment supports five-state gap model",async()=>{const s=await readFile(assess,"utf8"); for(const x of ["SATISFIED","PARTIAL","MISSING","NOT_APPLICABLE","E0"]) assert.ok(s.includes(x));});
+test("audit package is hashed and bounded against certification claims",async()=>{const s=(await readFile(pack,"utf8")).toLowerCase(); assert.ok(s.includes("sha256")); assert.ok(s.includes("not certification"));});
