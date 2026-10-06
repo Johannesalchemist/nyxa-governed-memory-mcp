@@ -3,3 +3,13 @@ HANDOFF.md
 data/audit.log.jsonl
 dist/
 node_modules/
+
+# Local migration/repair snapshots
+*.bak
+*.bak-*
+*.pre-*
+.backup-*/
+toolbox-v1-stage/
+
+# Local research datasets; keep provenance/manifests in Git, not raw corpora
+data/real-world/
