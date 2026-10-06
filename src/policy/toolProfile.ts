@@ -50,7 +50,11 @@ export const CHATGPT_GOVERNED_EXECUTE_TOOLS: ReadonlySet<string> = new Set([
   "nyxa_git_diff",
   "nyxa_logs",
   "nyxa_run_test",
-  "nyxa_apply_patch"
+  "nyxa_apply_patch",
+  "toolbox.list",
+  "toolbox.describe",
+  "toolbox.health",
+  "toolbox.execute"
 ]);
 
 const KNOWN_PROFILES: Readonly<Record<string, ReadonlySet<string>>> = {

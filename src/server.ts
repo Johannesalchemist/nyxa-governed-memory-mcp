@@ -54,6 +54,7 @@ import { buildGammaDecisions } from "./tools/gamma.decisions.js";
 import { buildCapabilityGateTrace } from "./tools/capability_gate.trace.js";
 import { buildEvidenceView } from "./tools/evidence.view.js";
 import { buildMemoryStatus } from "./tools/memory.status.js";
+import { toolbox } from "./toolbox/registry.js";
 import { isToolAllowedByProfile } from "./policy/toolProfile.js";
 import {
   IdentityRecordSchema,
@@ -161,6 +162,13 @@ const CONNECTOR_TOOLS = [
     inputSchema: objectSchema({ path: stringSchema(1_000), patch: stringSchema(1_000_000) }, ["path", "patch"]),
     annotations: DEV_ANNOTATIONS
   }
+] as const;
+
+const TOOLBOX_TOOLS = [
+  { name: "toolbox.list", description: "Lists registered NYXA Toolbox capabilities.", inputSchema: objectSchema({}), annotations: READ_ANNOTATIONS },
+  { name: "toolbox.describe", description: "Describes one registered NYXA Toolbox capability.", inputSchema: objectSchema({ name: stringSchema(200) }, ["name"]), annotations: READ_ANNOTATIONS },
+  { name: "toolbox.health", description: "Returns Toolbox registry health and capability count.", inputSchema: objectSchema({}), annotations: READ_ANNOTATIONS },
+  { name: "toolbox.execute", description: "Executes a registered read-only Toolbox capability. Effect capabilities remain fail-closed until governed execution is wired.", inputSchema: objectSchema({ name: stringSchema(200), input: { type: "object" as const } }, ["name"]), annotations: READ_ANNOTATIONS }
 ] as const;
 
 const GOVERNANCE_TOOLS = [
@@ -490,9 +498,12 @@ export class NyxaGovernedMemoryServer {
   private readonly humanGrantStore: HumanGrantStore;
   private readonly mandateStore: MandateStore;
 
-  public constructor() {
+  public constructor(authenticatedPrincipal?: string) {
     this.config = loadConfig();
-    this.companyAuthority = new CompanyAuthority([this.config.dataDir, ...this.config.connector.roots.map(root => root.path)]);
+    this.companyAuthority = new CompanyAuthority(
+      [this.config.dataDir, ...this.config.connector.roots.map(root => root.path)],
+      authenticatedPrincipal
+    );
     this.auditLog = new AuditLog(this.config.dataDir);
     this.writerLock = new WriterLock(this.config.dataDir);
     this.replayGuard = new ReplayGuard(this.config.dataDir);
@@ -597,7 +608,7 @@ export class NyxaGovernedMemoryServer {
         annotations: READ_ANNOTATIONS
       } as const;
 
-      const allTools = [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...MEMORY_TOOLS, companyAuditReadTool, ...HUMAN_AUTHORITY_TOOLS, ...OBSERVABILITY_TOOLS];
+      const allTools = [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...TOOLBOX_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...MEMORY_TOOLS, companyAuditReadTool, ...HUMAN_AUTHORITY_TOOLS, ...OBSERVABILITY_TOOLS];
       const profile = this.config.toolProfile;
       return { tools: allTools.filter(tool => (!profile.active || profile.allowed.has(tool.name)) && this.companyAuthority.permitsTool(tool.name)) };
     });
@@ -652,6 +663,10 @@ export class NyxaGovernedMemoryServer {
         assertKeys(input, ["tenant_id", "organization_id", "audit_id"]);
         return await this.handleCompanyAuditRead(input);
       }
+      if (name === "toolbox.list") { assertKeys(input, []); return toolJsonResult({ toolbox_version: "1.0.0", capabilities: toolbox.list() }); }
+      if (name === "toolbox.describe") { assertKeys(input, ["name"]); const n=requiredString(input,"name",200); const c=toolbox.describe(n); return toolJsonResult(c ? { capability:c } : { error:"capability_not_found", name:n }, !c); }
+      if (name === "toolbox.health") { assertKeys(input, []); return toolJsonResult({ toolbox_version:"1.1.0", ...toolbox.health() }); }
+      if (name === "toolbox.execute") { assertKeys(input, ["name","input"]); const n=requiredString(input,"name",200); const c=toolbox.describe(n); if(!c) return toolJsonResult({error:"capability_not_found",name:n},true); if(c.risk!=="read") return toolJsonResult({policy_decision:"DENY",reason:"effect_capability_requires_governed_dispatch",name:n},true); const args=(input.input && typeof input.input==="object" && !Array.isArray(input.input)) ? input.input as Record<string,unknown> : {}; return toolJsonResult({capability:n,result:await toolbox.execute(n,args)}); }
       if (name === "nyxa_propose_action") {
         return await this.handleProposeAction(input);
       }

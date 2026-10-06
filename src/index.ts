@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { NyxaGovernedMemoryServer } from "./server.js";
+import { verifyConfiguredEntraIdentity } from "./identity/entraBootstrap.js";
 
 async function main(): Promise<void> {
-  const server = new NyxaGovernedMemoryServer();
+  const entraPrincipal = await verifyConfiguredEntraIdentity();
+  const server = new NyxaGovernedMemoryServer(entraPrincipal?.authorityPrincipalId);
   await server.start();
 }
 

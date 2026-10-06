@@ -73,6 +73,7 @@ const unavailable = (connector: string) => async () => ({
 
 toolbox.registerConnector({ id: "media", kind: "provider", state: "ready", description: "Governed media provider gateway." });
 toolbox.registerConnector({ id: "sascha-mac", kind: "remote_runner", state: "not_configured", description: "Outbound authenticated macOS/Xcode runner." });
+toolbox.registerConnector({ id: "server-c-unreal", kind: "remote_runner", state: "not_configured", description: "Governed Unreal Engine/GPU runner on Server C." });
 toolbox.registerConnector({ id: "apple-store", kind: "api", state: "not_configured", description: "App Store Connect adapter; credentials remain outside MCP results." });
 toolbox.registerConnector({ id: "n8n-central", kind: "workflow", state: "not_configured", description: "Authoritative central n8n orchestration adapter." });
 toolbox.registerConnector({ id: "n8n-sascha", kind: "workflow", state: "not_configured", description: "Sascha local n8n adapter for governed reconciliation." });

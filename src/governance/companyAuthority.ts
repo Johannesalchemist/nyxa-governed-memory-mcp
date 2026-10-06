@@ -39,7 +39,7 @@ export type CompanyAuthorityDecision = {
  */
 export class CompanyAuthority {
   private readonly companyArgs = process.argv.slice(2).filter(arg => arg.startsWith("--company-principal=") || arg.startsWith("--company-authority-file="));
-  public readonly restrictsSession = this.companyArgs.length > 0;
+  public readonly restrictsSession: boolean;
   private readonly bindingConfigValid: boolean;
   public get principalId(): string | null { return this.principal ?? null; }
   public permitsTool(name: string): boolean {
@@ -47,14 +47,21 @@ export class CompanyAuthority {
   }
   private readonly principal: string | undefined;
   private readonly file: string | undefined;
-  public constructor(private readonly excludedRoots: readonly string[]) {
+  public constructor(
+    private readonly excludedRoots: readonly string[],
+    authenticatedPrincipal?: string
+  ) {
     const option = (name: string): string | undefined => {
       const matches = process.argv.slice(2).filter(arg => arg.startsWith(name + "="));
       return matches.length === 1 ? matches[0]!.slice(name.length + 1) || undefined : undefined;
     };
-    this.principal = option("--company-principal");
+    const assertedPrincipal = option("--company-principal");
     this.file = option("--company-authority-file");
-    this.bindingConfigValid = !this.restrictsSession || (this.companyArgs.length === 2 && !!this.principal && !!this.file);
+    this.principal = authenticatedPrincipal ?? assertedPrincipal;
+    this.restrictsSession = !!authenticatedPrincipal || this.companyArgs.length > 0;
+    const authenticatedBinding = !!authenticatedPrincipal && !assertedPrincipal && this.companyArgs.length === 1 && !!this.file;
+    const launcherBinding = !authenticatedPrincipal && this.companyArgs.length === 2 && !!assertedPrincipal && !!this.file;
+    this.bindingConfigValid = !this.restrictsSession || authenticatedBinding || launcherBinding;
   }
   public async check(resource: CompanyResource, permission: "read" | "write"): Promise<CompanyAuthorityDecision> {
     const result = (allowed: boolean, reason: string): CompanyAuthorityDecision => ({
