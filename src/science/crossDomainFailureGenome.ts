@@ -1,0 +1,13 @@
+import type {ScientificFamily} from './scientificTwinFabric.js';
+export type CrossDomainFailureClass='OBSERVABILITY'|'EPISTEMIC'|'COORDINATION'|'AUTHORITY'|'REALITY_GAP'|'PROVENANCE'|'STALE_STATE'|'COMMON_MODE'|'MANIPULATION'|'MISSING_BOUNDARY';
+export type FailureObservation={failureClass:CrossDomainFailureClass;family:ScientificFamily;twinId:string;domain:string;reproduced:boolean;evidenceRef:string|null;repairPrinciples:readonly string[]};
+export type PatternCandidate={failureClass:CrossDomainFailureClass;familyCoverage:number;domainCoverage:number;failureTransferScore:number;repairTransfer:readonly {principle:string;domains:number}[];candidateInvariant:boolean;requiresForeignDomainChallenge:boolean;authorityEffect:'NONE'};
+export function discoverFailurePatterns(xs:readonly FailureObservation[]):PatternCandidate[]{
+ const classes=[...new Set(xs.map(x=>x.failureClass))];
+ return classes.map(f=>{const r=xs.filter(x=>x.failureClass===f&&x.reproduced&&x.evidenceRef);const families=new Set(r.map(x=>x.family));const domains=new Set(r.map(x=>x.domain));const rp=new Map<string,Set<string>>();for(const x of r)for(const p of x.repairPrinciples){if(!rp.has(p))rp.set(p,new Set());rp.get(p)!.add(x.domain)}
+ const repairs=[...rp].map(([principle,ds])=>({principle,domains:ds.size})).sort((a,b)=>b.domains-a.domains);
+ return{failureClass:f,familyCoverage:families.size,domainCoverage:domains.size,failureTransferScore:domains.size,candidateInvariant:families.size>=3&&domains.size>=3,repairTransfer:repairs,requiresForeignDomainChallenge:true,authorityEffect:'NONE'}});
+}
+export type InvariantChallenge={candidate:string;sourceDomains:readonly string[];challengeDomains:readonly string[];counterexampleRefs:readonly string[];ablationPassed:boolean;independentVerification:boolean};
+export function invariantTransferGate(x:InvariantChallenge){const foreign=x.challengeDomains.some(d=>!x.sourceDomains.includes(d));const reasons:string[]=[];if(!foreign)reasons.push('foreign_domain_challenge_missing');if(x.counterexampleRefs.length)reasons.push('counterexample_open');if(!x.ablationPassed)reasons.push('ablation_failed');if(!x.independentVerification)reasons.push('independent_verification_missing');return{outcome:reasons.length?'HOLD' as const:'GENERALIZED_INVARIANT_CANDIDATE' as const,invariantTransferScore:new Set(x.challengeDomains).size,authorityEffect:'NONE' as const,reasons}}
+export const crossDomainFailureMatrix={families:8,dimensions:['FAILURE_CLASS','CAPABILITY_FAMILY','DOMAIN_TWIN','SYSTEM_LAYER'] as const,simulationOnly:true,autonomousPromotion:false,authorityEffect:'NONE' as const};
