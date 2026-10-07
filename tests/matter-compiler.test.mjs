@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {buildMatterSpec,compileMatter,recordPhysicalBuild} from '../dist/organism/matterCompiler.js';
+import {rankRealizations,learnFromMeasurement} from '../dist/organism/physicalRealization.js';
+const spec=buildMatterSpec({requirements:{widthMm:300},geometryRef:'cad:v1',lineageRefs:['sim:e1']});
+const none=[];
+test('same spec compiles to simulation without hardware',()=>{assert.equal(compileMatter(spec,'SIMULATION',none).state,'SIMULATION_ONLY')});
+test('missing printer becomes external fab, never built',()=>{assert.equal(compileMatter(spec,'ADDITIVE_3MF',none).state,'EXTERNAL_FAB_REQUIRED')});
+test('verified machine creates build-ready not physically-built',()=>{const c=[{backend:'ADDITIVE_3MF',available:true,verifiedAt:'2026-10-08T00:00:00Z',machineRef:'printer:1',constraints:{}}];assert.equal(compileMatter(spec,'ADDITIVE_3MF',c).state,'BUILD_READY')});
+test('physical truth requires build evidence',()=>{const c=[{backend:'ADDITIVE_3MF',available:true,verifiedAt:'2026-10-08T00:00:00Z',machineRef:'printer:1',constraints:{}}];const p=compileMatter(spec,'ADDITIVE_3MF',c);assert.throws(()=>recordPhysicalBuild(p,[]));assert.equal(recordPhysicalBuild(p,['photo:1']).truth,'PHYSICALLY_BUILT')});
+test('realization ranking cannot select unavailable physical backend',()=>{const r=rankRealizations([{spec,backend:'CNC_STEP',fitness:.9,manufacturability:.9,evidenceRefs:['sim:1']},{spec,backend:'SIMULATION',fitness:.7,manufacturability:1,evidenceRefs:['sim:2']}],[]);assert.equal(r.winner.backend,'SIMULATION')});
+test('measurement creates calibration candidate only',()=>{const l=learnFromMeasurement({predicted:{x:10},measured:{x:12},evidenceRefs:['meter:1']});assert.equal(l.calibrationDelta.x,2);assert.equal(l.authorityEffect,'NONE');assert.equal(l.requiresRegression,true)});
