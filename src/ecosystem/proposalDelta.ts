@@ -1,0 +1,4 @@
+import type {DesignResult} from './consortiumDesigner.js';
+export interface ProposalSnapshot {id:string;partnerIds:string[];workPackages:Record<string,string[]>;openGaps:string[];capital:number;authorityCoverage:boolean}
+export function proposalFromDesign(id:string,d:DesignResult,workPackages:Record<string,string[]>={}):ProposalSnapshot{return {id,partnerIds:d.network.entityIds,workPackages,openGaps:[...d.missingCapabilities,...(!d.authorityCoverage?['AUTHORITY_ACCESS']:[])],capital:d.capital,authorityCoverage:d.authorityCoverage}}
+export function proposalDelta(a:ProposalSnapshot,b:ProposalSnapshot){return {addedPartners:b.partnerIds.filter(x=>!a.partnerIds.includes(x)),removedPartners:a.partnerIds.filter(x=>!b.partnerIds.includes(x)),addedGaps:b.openGaps.filter(x=>!a.openGaps.includes(x)),closedGaps:a.openGaps.filter(x=>!b.openGaps.includes(x)),capitalDelta:b.capital-a.capital,authorityChanged:a.authorityCoverage!==b.authorityCoverage}}
