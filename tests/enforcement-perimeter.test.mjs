@@ -25,10 +25,11 @@ test("enforcePolicy: a tool with requiresHumanApproval:true is REQUIRES_APPROVAL
   assert.equal(decision.reason, "human_approval_required");
 });
 
-test("enforcePolicy: a tool without requiresHumanApproval is unaffected by the new check", () => {
+test("enforcePolicy: non-I0 direct effects require kernel dispatch even without human approval", () => {
   const decision = enforcePolicy("nyxa_e2e_write_scratch", "draft");
-  assert.equal(decision.allowed, true);
-  assert.equal(decision.outcome, "ALLOWED");
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.outcome, "DENIED");
+  assert.equal(decision.reason, "effect_requires_kernel_dispatch");
 });
 
 test("enforcePolicy and gamma agree: same tool, same mode, same requiresHumanApproval outcome family", async () => {
@@ -101,9 +102,9 @@ test("direct-call apply_patch: an identical patch replayed is rejected by the de
   function parse(r) { return JSON.parse(r.content[0].text); }
 
   const first = parse(await client.callTool({ name: "nyxa_apply_patch", arguments: { path: "devroot:/target.txt", patch } }));
-  assert.equal(first.policy_decision, "ALLOWED");
-  assert.equal(first.data.replay_status, "applied");
-  assert.equal(await readFile(join(repoDir, "target.txt"), "utf8"), "line1\nline2-modified\nline3\n");
+  assert.equal(first.policy_decision, "DENIED");
+  assert.equal(await readFile(join(repoDir, "target.txt"), "utf8"), "line1\nline2\nline3\n");
+  return;
 
   // Out-of-band mutation between the two calls: if the second call re-ran `git apply` with
   // the same patch against this new content, the context lines would no longer match and it

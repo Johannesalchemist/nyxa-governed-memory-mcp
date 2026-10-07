@@ -37,9 +37,6 @@ export const CHATGPT_GOVERNED_EXECUTE_TOOLS: ReadonlySet<string> = new Set([
   // This profile remains only an exposure allowlist. ToolPolicy, Gamma, E0,
   // mandates, ExecutionGate and SecureConnector/PathGuard still authorize
   // every actual invocation/effect independently.
-  "arbeitsbahnhof.task.enqueue",
-  "arbeitsbahnhof.task.claim",
-  "arbeitsbahnhof.task.result",
 
   // Bounded development/inspection tools required for governed autonomous work.
   "nyxa_system_status",

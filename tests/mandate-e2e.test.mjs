@@ -15,7 +15,7 @@ async function spawn() {
   const dataDir = await mkdtemp(join(tmpdir(), "nyxa-mandate-data-"));
   const scratch = await mkdtemp(join(tmpdir(), "nyxa-mandate-scratch-"));
   const home = await createIsolatedE2EHome();
-  const transport = new StdioClientTransport({ command: "/usr/bin/node", args: [".tmp-mandate-dist/index.js"], cwd: resolve("."),
+  const transport = new StdioClientTransport({ command: "/usr/bin/node", args: ["dist/index.js"], cwd: resolve("."),
     env: { PATH: process.env.PATH, HOME: home.homeDir, LANG: "C.UTF-8", NYXA_DATA_DIR: dataDir, NYXA_E2E_SCRATCH_ROOT: scratch, NYXA_AGENT_MODE: "draft", NYXA_HUMAN_AUTHORITY_TOKEN: TOKEN }, stderr: "pipe" });
   const client = new Client({ name: "mandate-e2e", version: "0.1.0" });
   await client.connect(transport);
@@ -71,6 +71,8 @@ test("I2 capability is preserved: no mandate escalates, exact mandate reaches ex
   const issued = parse(await client.callTool({ name: "nyxa_mandate_issue", arguments: { token: TOKEN, actor: "identity-admin", action: "nyxa_self_model_write_identity", scope_prefix: "self-model/identity", target_prefix: "self-model:/identity", ttl_seconds: 3600, max_executions_per_window: 1, max_effect_units_per_window: 1 } }));
   assert.ok(issued.mandate.mandateId);
   const after = parse(await client.callTool({ name: "nyxa_propose_action", arguments: { proposal: i2Proposal("after") } }));
-  assert.equal(after.policy_decision, "ALLOW");
+  assert.equal(after.policy_decision, "ESCALATE");
+  assert.equal(after.domain, "C5");
+  assert.equal(after.reason, "effect_radius_unknown_requires_human_review");
   assert.equal(after.proposed_action, "nyxa_self_model_write_identity");
 });

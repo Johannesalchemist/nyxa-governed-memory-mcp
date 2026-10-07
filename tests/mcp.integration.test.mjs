@@ -106,15 +106,15 @@ test("real MCP stdio surface is typed, scoped and fail-closed", async (context) 
     name: "nyxa_run_test",
     arguments: { target: "drift-audit" }
   }));
-  assert.equal(testRun.policy_decision, "ALLOWED");
-  assert.equal(testRun.evidence.trust, "UNVERIFIED_SOURCE");
+  assert.equal(testRun.policy_decision, "DENIED");
+  assert.equal(testRun.evidence, undefined);
 
   const deniedPatch = parseResult(await client.callTool({
     name: "nyxa_apply_patch",
     arguments: { path: "governed-dev:/src/connector/config.ts", patch: "invalid" }
   }));
   assert.equal(deniedPatch.policy_decision, "DENIED");
-  assert.equal(deniedPatch.error.code, "control_plane_write_denied");
+  assert.equal(deniedPatch.error.code, "effect_requires_kernel_dispatch");
 
   await assert.rejects(() => client.callTool({ name: "exec", arguments: {} }));
   const audit = parseResult(await client.callTool({

@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {executeThroughKernelGate} from '../dist/governance/kernelDispatchGate.js';
+const envelope={version:'nyxa.kernel.v1',actor:'a',action:'x',target:'t',scope:'s',effectClass:'irreversible',authorityRequired:true,verification:'independent'};
+test('I2/I3 missing verifier fails before handler call',async()=>{let calls=0;await assert.rejects(()=>executeThroughKernelGate(envelope,async()=>{calls++;return 'effect';}),/independent_verifier_required_pre_execution/);assert.equal(calls,0);});
+test('bound verifier permits dispatch gate to hand off to two-phase path',async()=>{let calls=0;const r=await executeThroughKernelGate(envelope,async()=>{calls++;return 'prepared';},true);assert.equal(r,'prepared');assert.equal(calls,1);});

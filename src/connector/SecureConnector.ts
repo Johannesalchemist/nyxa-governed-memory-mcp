@@ -351,7 +351,10 @@ export class SecureConnector {
     }
   }
 
-  public async applyPatch(virtualPath: string, patch: string): Promise<ConnectorResult> {
+  /** Pure patch admission preflight for Kernel V1. Resolves the allowlisted dev target and
+   * validates exact single-file patch semantics, but performs no git command, replay claim,
+   * backup, file write, or other effect. The returned effect radius is therefore server-derived. */
+  public async preflightPatch(virtualPath: string, patch: string): Promise<{ effectRadius: 1 }> {
     ensureConnectorEnabled(this.config);
     if (!this.config.devEnabled) throw new ConnectorError("dev_mode_disabled", "Development capabilities are disabled.");
     if (Buffer.byteLength(patch, "utf8") > this.config.limits.maxPatchBytes || patch.includes("\0")) {
@@ -359,6 +362,14 @@ export class SecureConnector {
     }
     const target = await this.guard.resolveDevTarget(virtualPath);
     this.validateSingleFilePatch(patch, target.relativePath);
+    const repository = this.config.repositories.find((candidate) => candidate.path === target.rootRealPath);
+    if (!repository) throw new ConnectorError("dev_repository_not_allowed", "Development root is not an approved repository.");
+    return { effectRadius: 1 };
+  }
+
+  public async applyPatch(virtualPath: string, patch: string): Promise<ConnectorResult> {
+    await this.preflightPatch(virtualPath, patch);
+    const target = await this.guard.resolveDevTarget(virtualPath);
     const repository = this.config.repositories.find((candidate) => candidate.path === target.rootRealPath);
     if (!repository) throw new ConnectorError("dev_repository_not_allowed", "Development root is not an approved repository.");
 

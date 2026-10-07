@@ -1,0 +1,3 @@
+export type AblationDesign="SINGLE_DELETION"|"DELETION_STUB"|"DOSE_RESPONSE"|"FACTORIAL"|"REPLACEMENT"|"SUFFICIENCY_NECESSITY";
+export function licensedClaim(d:AblationDesign){return{SINGLE_DELETION:"METRIC_CHANGED_IN_HARNESS",DELETION_STUB:"STRUCTURE_SPECIFIC_DEPENDENCY",DOSE_RESPONSE:"GRADED_OR_THRESHOLD_DEPENDENCE",FACTORIAL:"INTERACTION_OR_REDUNDANCY",REPLACEMENT:"EQUIVALENCE_CLASS",SUFFICIENCY_NECESSITY:"MINIMUM_STRUCTURE"}[d];}
+export function seedsSufficient(values:readonly number[],minimum:number){if(values.length<minimum)return{allowed:false,variance:null};const mean=values.reduce((a,b)=>a+b,0)/values.length;const variance=values.reduce((s,v)=>s+(v-mean)**2,0)/(values.length-1||1);return{allowed:true,variance};}

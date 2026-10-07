@@ -1,0 +1,3 @@
+export type HealthVector={resilience:number;diversity:number;integrity:number;observability:number;reversibility:number;epistemicQuality:number;resourceBalance:number;adaptability:number;authorityBalance:number};
+export function validateHealth(h:HealthVector){for(const v of Object.values(h))if(!Number.isFinite(v)||v<0||v>1)throw new Error("health_vector_invalid");return Object.freeze({...h});}
+export function paretoCompare(a:HealthVector,b:HealthVector){const av=Object.values(a),bv=Object.values(b);const ge=av.every((v,i)=>v>=(bv[i]??0)),le=av.every((v,i)=>v<=(bv[i]??0));return ge&&!le?"DOMINATES":le&&!ge?"DOMINATED":"TRADEOFF";}

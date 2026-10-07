@@ -90,9 +90,9 @@ test("D/I real: no grant file currently exists on this host -> real CLI fails cl
   assert.equal(out.parsed?.decision?.outcome, "DENY");
 });
 
-test("J real: a grant file with untrusted (group/other-writable) permissions is rejected before any decision logic runs", () => {
+test("J real: a grant file with untrusted (group/other-writable) permissions is rejected before any decision logic runs", (t) => {
   assert.equal(existsSync(GRANT_PATH), false, "precondition: no live grant should exist for this test");
-  mkdirSync("/etc/nyxa", { recursive: true });
+  try { mkdirSync("/etc/nyxa", { recursive: true }); writeFileSync(GRANT_PATH, "probe", { mode: 0o600 }); rmSync(GRANT_PATH, { force: true }); } catch (e) { if (e?.code === "EACCES") { t.skip("host account cannot write /etc/nyxa"); return; } throw e; }
   const badGrant = { ...baseGrant, entries: [{ ...baseGrant.entries[0], nonce: "realnoncebadperm001" }] };
   writeFileSync(GRANT_PATH, JSON.stringify(badGrant), { mode: 0o666 });
   chmodSync(GRANT_PATH, 0o666); // world-writable on purpose: this is the attack this check exists for

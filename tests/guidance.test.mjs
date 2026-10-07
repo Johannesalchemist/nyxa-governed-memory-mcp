@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveGuidance, buildBoundedReplan } from "../.tmp-guidance-dist/governance/guidance.js";
+import { deriveGuidance, buildBoundedReplan } from "../dist/governance/guidance.js";
 const p={actor:"buyer",action:"purchase",target:"payment:shop/300",scope:"travel",claims:[{tag:"FACT",statement:"x",source:"t"}],uncertainty:0,requestedCapabilityClass:"I2",estimatedIrreversibility:"I2",provenance:{taskId:"t",runId:"r",requestingIdentity:"Jo"}};
 const policy={toolName:"purchase",minimumMode:"draft",writesAuthoritativeMemory:false,requiresHumanApproval:false,executionRisk:"medium",allowedInV01:true,capabilityClass:"I2"};
 test("missing mandate guides toward authority instead of capability removal",()=>assert.equal(deriveGuidance(p,policy,"capability_class_I2_requires_mandate").status,"REQUEST_MANDATE"));

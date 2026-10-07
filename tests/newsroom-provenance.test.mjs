@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-const compiled = process.env.NYXA_NEWSROOM_TEST_DIST;
-assert.ok(compiled, 'An isolated compiled output directory is required');
+const compiled = process.env.NYXA_NEWSROOM_TEST_DIST ?? new URL('../dist', import.meta.url).pathname;
 const { consultNewsroom, parseNewsroomInput } = await import(pathToFileURL(compiled + '/cognitive/newsroom.js').href);
 const catalog = {data:[{id:'openai/test-model',architecture:{input_modalities:['text']}},{id:'anthropic/claude-test',architecture:{input_modalities:['text']}}]};
 async function fixture(reply, run) {

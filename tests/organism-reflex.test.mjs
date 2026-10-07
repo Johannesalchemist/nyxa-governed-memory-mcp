@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {buildOrganismSignal} from '../dist/organism/signalEnvelope.js';import {routeOrganismSignal} from '../dist/organism/reflex.js';
+function s(kind,producer='jev',truthState='INFERRED'){return buildOrganismSignal({kind,producer,truthState,subject:'x',payload:{x:1},provenanceRefs:[],parentSignalIds:[]});}
+test('observation routes to E0 but never creates effect',()=>{const r=routeOrganismSignal(s('OBSERVATION','sensor','OBSERVED'));assert.equal(r.route,'E0_TRIAGE');assert.equal(r.mayCreateEffect,false);});
+test('security routes high-priority containment review, not authority',()=>{const r=routeOrganismSignal(s('SECURITY_SIGNAL','antlion'));assert.equal(r.route,'SECURITY_CONTAINMENT_REVIEW');assert.equal(r.priority,'high');assert.equal(r.mayCreateEffect,false);});
+test('question and simulation candidate route to discovery only',()=>{for(const x of [s('QUESTION','e0','UNKNOWN'),s('SIMULATION_CANDIDATE','hunter','SIMULATED')]){const r=routeOrganismSignal(x);assert.equal(r.route,'DISCOVERY');assert.equal(r.mayCreateEffect,false);}});
+test('verified effect feedback cannot recursively act',()=>{const r=routeOrganismSignal(s('EFFECT_RESULT','verification','VERIFIED'));assert.equal(r.route,'EFFECT_VERIFICATION_FEEDBACK');assert.equal(r.mayCreateEffect,false);});

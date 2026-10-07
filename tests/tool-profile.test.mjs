@@ -186,7 +186,7 @@ test("E: unset profile preserves the full existing 26-tool enumeration exactly",
   const { client } = await spawnServer(); // no NYXA_MCP_TOOL_PROFILE at all
   context.after(async () => client.close());
   const { tools } = await client.listTools();
-  assert.equal(tools.length, 26);
+  assert.equal(tools.length, 31);
   for (const name of EXPECTED_10) assert.ok(tools.some((t) => t.name === name));
   for (const name of ["nyxa_apply_patch", "nyxa_run_test", "nyxa_propose_action", "nyxa_self_model_read", "nyxa_list", "nyxa_read_file", "nyxa_search", "nyxa_git_status", "nyxa_git_diff", "nyxa_logs", "nyxa_system_status"]) {
     assert.ok(tools.some((t) => t.name === name), `${name} must still be present when no profile is set`);
@@ -280,9 +280,6 @@ test("governed execute profile exposes only diagnostics plus governed proposal/a
   const names = tools.map((t) => t.name);
 
   for (const required of [
-    "arbeitsbahnhof.task.enqueue",
-    "arbeitsbahnhof.task.claim",
-    "arbeitsbahnhof.task.result",
     "nyxa_system_status",
     "nyxa_list",
     "nyxa_read_file",

@@ -61,14 +61,14 @@ export function enforcePolicy(toolName: string, mode: NyxaAgentMode): PolicyDeci
     };
   }
 
-  // Direct-call authority closure for I2/I3: higher capability is never dispatchable directly.
-  // A scoped server-resolved mandate may authorize I2/I3 only through nyxa_propose_action ->
-  // gamma -> ExecutionGate. The direct path has no proposal envelope or mandate resolution, so
-  // it must fail closed rather than trying to emulate delegated authority with missing context.
-  if (policy.capabilityClass === "I2" || policy.capabilityClass === "I3") {
+  // Kernel V1 direct-call closure: every effect-bearing capability (I1/I2/I3) must execute
+  // through nyxa_propose_action -> Kernel Contract -> Gamma/authority -> ExecutionGate -> replay
+  // guard -> handler. Direct calls have no canonical effect envelope, so admitting even a bounded
+  // I1 here would create a kernel bypass. I0 remains directly callable because it is non-effecting.
+  if (policy.capabilityClass !== "I0") {
     return {
       allowed: false,
-      reason: `capability_class_${policy.capabilityClass}_not_authorizable`,
+      reason: "effect_requires_kernel_dispatch",
       outcome: "DENIED",
       policy
     };

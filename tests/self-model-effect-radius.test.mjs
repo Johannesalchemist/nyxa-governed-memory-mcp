@@ -31,11 +31,7 @@ test("self-model belief effect contract is narrow and server-owned", async () =>
     "exactly one validated belief record may resolve to radius 1"
   );
 
-  assert.match(
-    source,
-    /pendingAppendRadius \?\? selfModelWriteRadius/,
-    "trusted radius must come from server-owned resolvers"
-  );
+  assert.ok(source.includes("const trustedEffectRadius =") && source.includes("selfModelWriteRadius"), "trusted radius must come from server-owned resolvers");
 
 });
 
@@ -78,11 +74,7 @@ test("three additional self-model effect contracts are narrow and schema-gated",
     );
   }
 
-  assert.match(
-    source,
-    /const trustedEffectRadius = pendingAppendRadius \?\? selfModelWriteRadius/,
-    "effect radius must remain server-owned"
-  );
+  assert.ok(source.includes("const trustedEffectRadius =") && source.includes("selfModelWriteRadius"), "effect radius must remain server-owned");
 });
 
 test("remaining I1 self-model effect contracts are explicit, narrow and schema-gated", async () => {

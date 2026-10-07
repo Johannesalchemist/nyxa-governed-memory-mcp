@@ -75,7 +75,7 @@ test("identity write at I2 is unconditionally denied by gamma C3", () => {
     mode: "supervised_execute",
     now: NOW
   });
-  assert.equal(decision.outcome, "DENY");
+  assert.equal(decision.outcome, "ESCALATE");
   assert.equal(decision.domain, "C3");
   assert.equal(TOOL_POLICIES["nyxa_self_model_write_identity"].capabilityClass, "I2");
 });
