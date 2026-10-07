@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {ingestRegulatoryDatum} from '../dist/ccam/regulatoryIngest.js';
+import {mandatoryCoverage,routeMandatorySignals,STVG_1G_FIELDS} from '../dist/ccam/mandatoryData.js';
+import {supervise} from '../dist/ccam/supervision.js';
+const datum=(fields)=>ingestRegulatoryDatum({id:'d1',sourceLaw:'StVG',sourceClause:'§1g + AFGBV Anlage 2',systemId:'ads1',systemVersion:'1',timestamp:'2026-10-07T20:00:00Z',fields,purposes:['CONTINUOUS_SUPERVISION'],provenanceRefs:['vehicle:1']});
+const passport={id:'p1',systemId:'ads1',systemVersion:'1',status:'QUALIFIED',qualifications:[{capabilityId:'minimal_risk_manoeuvre',status:'QUALIFIED'},{capabilityId:'external_connectivity',status:'QUALIFIED'},{capabilityId:'unrelated',status:'QUALIFIED'}],authorityRefs:[],hash:'fixture'};
+test('mandatory field coverage is explicit and cannot silently pass missing data',()=>{const fields=Object.fromEntries(STVG_1G_FIELDS.map(k=>[k,'x']));const full=mandatoryCoverage(datum(fields));assert.equal(full.complete,true);const partial=mandatoryCoverage(datum({vin:'x',speed:10}));assert.equal(partial.complete,false);assert.ok(partial.missing.includes('softwareVersion'))});
+test('system impairment targets only relevant qualified capability',()=>{const s=routeMandatorySignals(datum({systemFault:true,safetySystemState:'IMPAIRED'}));const x=supervise(passport,s);assert.equal(x.action,'SUSPEND_CAPABILITY');assert.deepEqual(x.capabilityIds,['minimal_risk_manoeuvre']);assert.ok(!x.capabilityIds.includes('unrelated'))});
+test('network boundary triggers targeted re-examination not blanket suspension',()=>{const x=supervise(passport,routeMandatorySignals(datum({networkLatency:2500})));assert.equal(x.action,'TARGETED_REEXAMINATION');assert.deepEqual(x.capabilityIds,['external_connectivity'])});
+test('signal for unqualified capability cannot mutate unrelated qualification',()=>{const x=supervise(passport,routeMandatorySignals(datum({weather:'snow'})));assert.equal(x.action,'NO_CHANGE');assert.deepEqual(x.capabilityIds,[])});

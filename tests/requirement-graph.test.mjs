@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {afgbvVerifiedSeeds} from '../dist/ccam/afgbvRequirementSeeds.js';import {buildRequirementGraph,requirementNodes,trace} from '../dist/ccam/requirementGraph.js';
+const base=requirementNodes(afgbvVerifiedSeeds);const uniq=[...new Map(base.map(n=>[n.id,n])).values()];
+const edges=afgbvVerifiedSeeds.flatMap(r=>[{from:'law:'+r.source+':'+r.clause,to:'req:'+r.id,kind:'IMPLEMENTS'},{from:'req:'+r.id,to:'cap:'+r.capabilityId,kind:'IMPLEMENTS'}]);
+test('verified legal seeds retain exact clause provenance',()=>{assert.equal(afgbvVerifiedSeeds.length,6);for(const r of afgbvVerifiedSeeds){assert.ok(r.clause);assert.ok(r.provenanceRefs[0].startsWith('official:'))}});
+test('law to capability is traversable',()=>{const g=buildRequirementGraph(uniq,edges);const x=trace(g,'law:AFGBV Anlage 1:Teil 1 Nr. 10.2','CAPABILITY');assert.deepEqual(x.map(n=>n.id),['cap:real_world_validation']);assert.equal(g.graphHash.length,64)});
+test('dangling legal/evidence edge fails closed',()=>assert.throws(()=>buildRequirementGraph(uniq,[...edges,{from:'req:missing',to:'cap:test_coverage',kind:'EVIDENCED_BY'}]),/dangling_edge/));
+test('simulation validation and dangerous-scenario parameterization remain separate requirements',()=>{const ids=new Set(afgbvVerifiedSeeds.map(x=>x.id));assert.ok(ids.has('AFGBV-A1-11-SIMVALID'));assert.ok(ids.has('AFGBV-A1-11-3PARAM'))});

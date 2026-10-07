@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {signReceipt,verifyReceipt} from '../dist/ccam/adpReceipts.js';
+import {munichSeedCatalog,scenarioVariants,catalogHash} from '../dist/ccam/adpScenarioCatalog.js';
+import {oddContained} from '../dist/ccam/adpOdd.js';
+const issuer={issuerId:'technical-service-demo',role:'TECHNICAL_SERVICE',secret:'test-secret-not-production'};
+const body={schema:'nyxa.adp.receipt.v0',receiptId:'r1',issuerId:issuer.issuerId,issuerRole:issuer.role,examPlanHash:'planhash',systemVersion:'1.0',kind:'ROAD',result:'PASS',scenarioIds:['s1'],oddHash:'oddhash',timestamp:'2026-10-07T18:30:00Z',provenanceRefs:['observer:1']};
+test('trusted external receipt verifies and tampering fails',()=>{const r=signReceipt(body,issuer);assert.equal(verifyReceipt(r,[issuer]),true);assert.equal(verifyReceipt({...r,result:'FAIL'},[issuer]),false)});
+test('unknown issuer cannot create trusted road evidence',()=>{const r=signReceipt(body,issuer);assert.equal(verifyReceipt(r,[]),false)});
+test('issuer role substitution is rejected',()=>assert.throws(()=>signReceipt({...body,issuerRole:'AUTHORITY'},issuer),/issuer_mismatch/));
+test('ODD expansion beyond certified envelope fails',()=>{const certified={city:'Munich',weather:['dry','rain'],speedMax:50};assert.equal(oddContained({city:'Munich',weather:'rain'},certified),true);assert.equal(oddContained({city:'Munich',weather:'snow'},certified),false);assert.equal(oddContained({city:'Berlin'},certified),false)});
+test('Munich seed scenarios retain source provenance and variation space',()=>{assert.ok(catalogHash(munichSeedCatalog).length===64);for(const s of munichSeedCatalog){assert.ok(s.provenanceRefs.length);assert.ok(scenarioVariants(s)>=s.minimumVariants)}});

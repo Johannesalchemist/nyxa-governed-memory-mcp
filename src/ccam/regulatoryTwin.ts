@@ -1,0 +1,4 @@
+import {hashRecord} from './adp.js';import type {RegulatoryDatum} from './regulatoryIngest.js';
+export type RegulatoryFinding={id:string;sourceDatumIds:readonly string[];hypothesis:string;counterHypothesis:string;observedBoundary:string;recommendedExperiment:string;provenanceRefs:readonly string[];hash:string};
+export function deriveRegulatoryFinding(data:readonly RegulatoryDatum[],x:Omit<RegulatoryFinding,'id'|'sourceDatumIds'|'hash'>):RegulatoryFinding{if(!data.length||!x.hypothesis||!x.counterHypothesis||!x.provenanceRefs.length)throw new Error('regulatory_finding_incomplete');const sourceDatumIds=data.map(d=>d.id);const body={id:'finding:'+hashRecord({sourceDatumIds,...x}).slice(0,20),sourceDatumIds,...x};return{...body,hash:hashRecord(body)}}
+export function learningCannotAuthorize(){return false}

@@ -26,6 +26,9 @@ import { buildAuditTrace, normalizeAuditTraceLimit } from "./tools/audit.trace.j
 import { parseProposal, ProposalValidationError } from "./governance/proposal.js";
 import { evaluateProposal } from "./governance/gamma.js";
 import { resolveEffectRadius } from "./governance/effectResolver.js";
+import { buildKernelEffectEnvelope } from "./governance/kernelContract.js";
+import { buildKernelEffectReceipt } from "./governance/effectReceipt.js";
+import { kernelDispatchGate } from "./governance/kernelDispatchGate.js";
 import { evaluateC0 } from "./governance/c0.js";
 import { SelfModelStore } from "./self-model/store.js";
 import { CandidateStore } from "./memory/candidateStore.js";
@@ -45,6 +48,7 @@ import { buildGammaDecisions } from "./tools/gamma.decisions.js";
 import { buildCapabilityGateTrace } from "./tools/capability_gate.trace.js";
 import { buildEvidenceView } from "./tools/evidence.view.js";
 import { buildMemoryStatus } from "./tools/memory.status.js";
+import { toolbox } from "./toolbox/registry.js";
 import { isToolAllowedByProfile } from "./policy/toolProfile.js";
 import { IdentityRecordSchema, PersonalityRecordSchema, SelfModelRecordSchema, CurrentStateSnapshotSchema, BeliefRecordSchema, CapabilityLimitationRecordSchema, GoalRecordSchema, AutobiographicalEventSchema, SELF_MODEL_DOMAINS } from "./self-model/types.js";
 const READ_ANNOTATIONS = {
@@ -134,6 +138,12 @@ const CONNECTOR_TOOLS = [
         inputSchema: objectSchema({ path: stringSchema(1_000), patch: stringSchema(1_000_000) }, ["path", "patch"]),
         annotations: DEV_ANNOTATIONS
     }
+];
+const TOOLBOX_TOOLS = [
+    { name: "toolbox.list", description: "Lists registered NYXA Toolbox capabilities.", inputSchema: objectSchema({}), annotations: READ_ANNOTATIONS },
+    { name: "toolbox.describe", description: "Describes one registered NYXA Toolbox capability.", inputSchema: objectSchema({ name: stringSchema(200) }, ["name"]), annotations: READ_ANNOTATIONS },
+    { name: "toolbox.health", description: "Returns Toolbox registry health and capability count.", inputSchema: objectSchema({}), annotations: READ_ANNOTATIONS },
+    { name: "toolbox.execute", description: "Executes a registered read-only Toolbox capability. Effect capabilities remain fail-closed until governed execution is wired.", inputSchema: objectSchema({ name: stringSchema(200), input: { type: "object" } }, ["name"]), annotations: READ_ANNOTATIONS }
 ];
 const GOVERNANCE_TOOLS = [
     {
@@ -434,9 +444,9 @@ export class NyxaGovernedMemoryServer {
     companyAuthority;
     humanGrantStore;
     mandateStore;
-    constructor() {
+    constructor(authenticatedPrincipal) {
         this.config = loadConfig();
-        this.companyAuthority = new CompanyAuthority([this.config.dataDir, ...this.config.connector.roots.map(root => root.path)]);
+        this.companyAuthority = new CompanyAuthority([this.config.dataDir, ...this.config.connector.roots.map(root => root.path)], authenticatedPrincipal);
         this.auditLog = new AuditLog(this.config.dataDir);
         this.writerLock = new WriterLock(this.config.dataDir);
         this.replayGuard = new ReplayGuard(this.config.dataDir);
@@ -532,7 +542,7 @@ export class NyxaGovernedMemoryServer {
                 }, ["tenant_id", "organization_id", "audit_id"]),
                 annotations: READ_ANNOTATIONS
             };
-            const allTools = [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...MEMORY_TOOLS, companyAuditReadTool, ...HUMAN_AUTHORITY_TOOLS, ...OBSERVABILITY_TOOLS];
+            const allTools = [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...TOOLBOX_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...MEMORY_TOOLS, companyAuditReadTool, ...HUMAN_AUTHORITY_TOOLS, ...OBSERVABILITY_TOOLS];
             const profile = this.config.toolProfile;
             return { tools: allTools.filter(tool => (!profile.active || profile.allowed.has(tool.name)) && this.companyAuthority.permitsTool(tool.name)) };
         });
@@ -582,6 +592,31 @@ export class NyxaGovernedMemoryServer {
             if (name === "nyxa_company_audit_read") {
                 assertKeys(input, ["tenant_id", "organization_id", "audit_id"]);
                 return await this.handleCompanyAuditRead(input);
+            }
+            if (name === "toolbox.list") {
+                assertKeys(input, []);
+                return toolJsonResult({ toolbox_version: "1.0.0", capabilities: toolbox.list() });
+            }
+            if (name === "toolbox.describe") {
+                assertKeys(input, ["name"]);
+                const n = requiredString(input, "name", 200);
+                const c = toolbox.describe(n);
+                return toolJsonResult(c ? { capability: c } : { error: "capability_not_found", name: n }, !c);
+            }
+            if (name === "toolbox.health") {
+                assertKeys(input, []);
+                return toolJsonResult({ toolbox_version: "1.1.0", ...toolbox.health() });
+            }
+            if (name === "toolbox.execute") {
+                assertKeys(input, ["name", "input"]);
+                const n = requiredString(input, "name", 200);
+                const c = toolbox.describe(n);
+                if (!c)
+                    return toolJsonResult({ error: "capability_not_found", name: n }, true);
+                if (c.risk !== "read")
+                    return toolJsonResult({ policy_decision: "DENY", reason: "effect_capability_requires_governed_dispatch", name: n }, true);
+                const args = (input.input && typeof input.input === "object" && !Array.isArray(input.input)) ? input.input : {};
+                return toolJsonResult({ capability: n, result: await toolbox.execute(n, args) });
             }
             if (name === "nyxa_propose_action") {
                 return await this.handleProposeAction(input);
@@ -874,11 +909,29 @@ export class NyxaGovernedMemoryServer {
         const companyAuditRadius = proposal.action === "nyxa_company_audit_record"
             ? await this.companyAuditStore.observationAppendRadius(proposal.target, proposal.payload)
             : undefined;
+        // Connector effects derive radius from server-owned operation semantics, never caller claims.
+        // run_test is confined to one approved sandbox target. apply_patch is confined by SecureConnector
+        // to one validated development file; payload shape is validated again at dispatch.
+        let connectorEffectRadius;
+        if (proposal.action === "nyxa_run_test") {
+            connectorEffectRadius = 1;
+        }
+        else if (proposal.action === "nyxa_apply_patch" && typeof proposal.payload?.patch === "string") {
+            try {
+                connectorEffectRadius = (await this.connector.preflightPatch(proposal.target, proposal.payload.patch)).effectRadius;
+            }
+            catch {
+                // Keep radius unknown here. Gamma/C5 must fail closed before execution; the exact
+                // connector validation error is intentionally not used to manufacture a trusted radius.
+                connectorEffectRadius = undefined;
+            }
+        }
         const trustedEffectRadius = pendingAppendRadius ??
             candidatePromotionRadius ??
             selfModelWriteRadius ??
             companyAuditRadius ??
-            newsroomRadius;
+            newsroomRadius ??
+            connectorEffectRadius;
         const effect = resolveEffectRadius(proposal.action, toolPolicy, trustedEffectRadius);
         const decision = evaluateProposal(proposal, {
             toolPolicy,
@@ -994,6 +1047,27 @@ export class NyxaGovernedMemoryServer {
                 }
             }
         }
+        // Kernel V1 contract: every proposal-routed execution must first become a canonical effect
+        // envelope. Unknown policy/action identity fails closed here, before budget reservation, replay
+        // reservation, grant consumption, or any handler. This is deliberately additive to the existing
+        // governance path: it does not replace Gamma, mandates, C0, epistemic checks, or ExecutionGate.
+        const kernelContract = buildKernelEffectEnvelope(proposal, toolPolicy);
+        if (!kernelContract.allowed) {
+            await this.auditGovernance("blocked", toolPolicy?.capabilityClass, "DENIED", started, `KERNEL_CONTRACT:${kernelContract.reason}`, affectedResource, { outcome: decision.outcome, domain: decision.domain, reason: decision.reason }, undefined, c0, humanGrantCheck);
+            return toolJsonResult({
+                policy_decision: "DENY", domain: "KERNEL_CONTRACT",
+                reason: kernelContract.reason, proposed_action: proposal.action
+            }, true);
+        }
+        // I2/I3 require independent verification. Until a two-phase verifier is bound to this
+        // proposal, fail closed before replay reservation, grant consumption, or any backend handler.
+        if (!kernelDispatchGate(kernelContract.envelope).allowed) {
+            await this.auditGovernance("blocked", toolPolicy?.capabilityClass, "DENIED", started, "KERNEL_VERIFICATION:independent_verifier_required_pre_execution", affectedResource, { outcome: decision.outcome, domain: decision.domain, reason: decision.reason }, undefined, c0, humanGrantCheck);
+            return toolJsonResult({
+                policy_decision: "DENY", domain: "KERNEL_VERIFICATION",
+                reason: "independent_verifier_required_pre_execution", proposed_action: proposal.action
+            }, true);
+        }
         // Execution budget/rate/external-policy gate: runs after authority + epistemic checks but
         // before replay reservation and before any handler. This is the common effect boundary for
         // every proposal-routed action, including internal memory/self-model/scratch mutations that
@@ -1049,8 +1123,20 @@ export class NyxaGovernedMemoryServer {
         try {
             const payload = await this.executeAllowedProposal(proposal, decision);
             const evidence = extractEvidence(payload);
+            // Kernel receipt is bound to the exact canonical effect envelope. For I1, operational
+            // connector evidence is the minimum acceptable handler receipt. I2/I3 deliberately do not
+            // self-verify here: they require a future independent verifier before `verified` can be true.
+            const receiptVerifier = kernelContract.envelope.verification === "none"
+                ? "none"
+                : kernelContract.envelope.verification === "receipt" && evidence?.status === "SUPPORTED"
+                    ? "handler-receipt"
+                    : "none";
+            const kernelReceipt = buildKernelEffectReceipt(kernelContract.envelope, "succeeded", receiptVerifier);
+            if (kernelContract.envelope.verification === "receipt" && !kernelReceipt.verified) {
+                throw new ConnectorError("kernel_receipt_missing", "Effect completed without required operational verification evidence.", "DENIED");
+            }
             await this.auditGovernance("allowed", toolPolicy?.capabilityClass, "ALLOWED", started, "success", affectedResource, { outcome: decision.outcome, domain: decision.domain, reason: decision.reason }, evidence, c0, humanGrantCheck, epistemic.ran && !epistemic.failed ? { classification: epistemic.result.classification, hold: false } : undefined, effect);
-            return toolJsonResult({ policy_decision: "ALLOW", proposed_action: proposal.action, result: payload });
+            return toolJsonResult({ policy_decision: "ALLOW", proposed_action: proposal.action, kernel: { envelope: kernelContract.envelope, receipt: kernelReceipt }, result: payload });
         }
         catch (error) {
             const safeError = asConnectorError(error);
@@ -1341,6 +1427,15 @@ export class NyxaGovernedMemoryServer {
             case "nyxa_git_status":
             case "nyxa_run_test":
                 return await this.executeConnectorProposal(proposal.action, proposal.target);
+            case "nyxa_apply_patch": {
+                const patch = proposal.payload?.patch;
+                if (typeof patch !== "string" || patch.length < 1 || patch.length > 1_000_000) {
+                    throw new ConnectorError("proposal_payload_invalid", "Patch proposal requires a bounded string payload.patch.", "INVALID");
+                }
+                if (!this.rateLimiter.take())
+                    throw new ConnectorError("rate_limited", "Rate limit exceeded.", "DENIED");
+                return await this.connector.applyPatch(proposal.target, patch);
+            }
             case "nyxa_self_model_write_identity":
             case "nyxa_self_model_write_personality":
             case "nyxa_self_model_write_self_model":

@@ -3,3 +3,6 @@ export * from './entityTwin.js'; export * from './relationships.js'; export * fr
 export * from './projectEvidence.js';
 export * from './counterfactuals.js';
 export * from './calibration.js';
+export * from './historicalLearning.js';
+export * from './businessStructure.js';
+export * from './businessStructureSimulation.js';

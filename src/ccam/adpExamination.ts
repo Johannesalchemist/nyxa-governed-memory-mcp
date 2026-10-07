@@ -1,0 +1,8 @@
+import {hashRecord,sealEvidence,type AdpEvidence,type AdpEvidenceKind,type AdpRequirement} from './adp.js';
+import type {CcamEvent} from './contracts.js';
+
+export type AdpExamPlan={id:string;requirementId:string;capabilityId:string;systemVersion:string;odd:Record<string,unknown>;requiredEvidence:readonly AdpEvidenceKind[];scenarioIds:readonly string[];frozenAt:string;frozenHash:string};
+export function createExamPlan(r:AdpRequirement,x:{systemVersion:string;odd:Record<string,unknown>;scenarioIds:readonly string[];frozenAt:string}):AdpExamPlan{if(!x.scenarioIds.length)throw new Error('adp_exam_scenarios_required');const body={id:'exam:'+hashRecord({r:r.id,...x}).slice(0,20),requirementId:r.id,capabilityId:r.capabilityId,systemVersion:x.systemVersion,odd:x.odd,requiredEvidence:r.requiredEvidence,scenarioIds:[...x.scenarioIds],frozenAt:x.frozenAt};return{...body,frozenHash:hashRecord(body)}}
+export function verifyExamPlan(p:AdpExamPlan){const{frozenHash,...body}=p;return frozenHash===hashRecord(body)}
+export function recordExamEvidence(plan:AdpExamPlan,x:{id:string;kind:AdpEvidenceKind;examiner:string;independent:boolean;heldOut:boolean;result:'PASS'|'FAIL'|'INCONCLUSIVE';timestamp:string;provenanceRefs:readonly string[]}):AdpEvidence{if(!verifyExamPlan(plan))throw new Error('adp_exam_plan_tampered');if(!plan.requiredEvidence.includes(x.kind))throw new Error('adp_exam_evidence_kind_unplanned');return sealEvidence({...x,systemVersion:plan.systemVersion,requirementId:plan.requirementId,capabilityId:plan.capabilityId,odd:plan.odd,scenarioIds:plan.scenarioIds})}
+export function scenarioMatchesPlan(plan:AdpExamPlan,e:CcamEvent){return plan.scenarioIds.includes(e.scenarioId)&&e.provenanceRefs.length>0}

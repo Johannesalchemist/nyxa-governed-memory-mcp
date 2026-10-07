@@ -1,0 +1,8 @@
+import type {CcamCountermeasure,CcamEvent,CcamOutcome,CcamTrlStage} from './contracts.js';
+import {simulationTrustGate} from '../organism/simValidation.js';
+export type EdgeCaseAssessment={edgeCase:boolean;risk:number;reasons:readonly string[];jevUsed:boolean};
+export function assessEdgeCase(e:CcamEvent,baseline:(e:CcamEvent)=>Omit<EdgeCaseAssessment,'jevUsed'>,jev?:(e:CcamEvent)=>Omit<EdgeCaseAssessment,'jevUsed'>):EdgeCaseAssessment{const r=jev?jev(e):baseline(e);return{...r,jevUsed:Boolean(jev)};}
+export function compareJevAblation(e:CcamEvent,baseline:(e:CcamEvent)=>Omit<EdgeCaseAssessment,'jevUsed'>,jev:(e:CcamEvent)=>Omit<EdgeCaseAssessment,'jevUsed'>){const a=assessEdgeCase(e,baseline),b=assessEdgeCase(e,baseline,jev);return{baseline:a,jev:b,disagreement:a.edgeCase!==b.edgeCase||Math.abs(a.risk-b.risk)>1e-9};}
+export function countermeasureReady(e:CcamEvent,c:CcamCountermeasure){return e.scenarioId===c.scenarioId&&c.provenanceRefs.length>0&&c.negativeImpactChecks.length>0;}
+export function effectDelta(c:CcamCountermeasure,o:CcamOutcome){const keys=new Set([...Object.keys(c.expectedEffect),...Object.keys(o.observedEffect)]);return Object.fromEntries([...keys].map(k=>[k,(o.observedEffect[k]??0)-(c.expectedEffect[k]??0)]));}
+export function trlGate(x:{stage:CcamTrlStage;selectedByFitness:boolean;frozenPrediction:boolean;heldOutSimulator:boolean;outOfSimulatorValidated:boolean;independentEvidence:boolean}){const sim=simulationTrustGate(x);const relevant=x.stage!=='RELEVANT_ENVIRONMENT'||(x.outOfSimulatorValidated&&x.independentEvidence);return{green:sim.trusted&&relevant,reason:!sim.trusted?sim.reason:!relevant?'relevant_environment_evidence_required':'validated'};}

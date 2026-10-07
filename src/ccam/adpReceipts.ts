@@ -1,0 +1,6 @@
+import {createHmac,timingSafeEqual} from 'node:crypto';import {hashRecord,type AdpEvidenceKind} from './adp.js';
+export type ExamReceipt={schema:'nyxa.adp.receipt.v0';receiptId:string;issuerId:string;issuerRole:'TECHNICAL_SERVICE'|'AUTHORITY'|'SIMULATOR'|'TEST_TRACK'|'ROAD_OBSERVER';examPlanHash:string;systemVersion:string;kind:AdpEvidenceKind;result:'PASS'|'FAIL'|'INCONCLUSIVE';scenarioIds:readonly string[];oddHash:string;timestamp:string;provenanceRefs:readonly string[];signature:string};
+export type TrustedIssuer={issuerId:string;role:ExamReceipt['issuerRole'];secret:string};
+const unsigned=(r:Omit<ExamReceipt,'signature'>)=>hashRecord(r);
+export function signReceipt(x:Omit<ExamReceipt,'signature'>,issuer:TrustedIssuer):ExamReceipt{if(x.issuerId!==issuer.issuerId||x.issuerRole!==issuer.role)throw new Error('adp_receipt_issuer_mismatch');const signature=createHmac('sha256',issuer.secret).update(unsigned(x)).digest('hex');return{...x,signature}}
+export function verifyReceipt(r:ExamReceipt,issuers:readonly TrustedIssuer[]){const i=issuers.find(x=>x.issuerId===r.issuerId&&x.role===r.issuerRole);if(!i)return false;const{signature,...body}=r;const expected=createHmac('sha256',i.secret).update(unsigned(body)).digest('hex');try{return timingSafeEqual(Buffer.from(signature,'hex'),Buffer.from(expected,'hex'))}catch{return false}}

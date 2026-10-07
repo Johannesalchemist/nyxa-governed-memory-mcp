@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {historicalLearningSeed,outcomeVector} from '../dist/ecosystem/historicalLearning.js';
+test('historical learning keeps direct goal separate from downstream value',()=>{const x=historicalLearningSeed.find(x=>x.id==='wifoe-stuttgart-stackit-hlrs');assert.ok(x);assert.equal(x.directGoalAchieved,false);assert.equal(x.downstreamValue,1);assert.equal(x.epistemicState,'OBSERVED')});
+test('historical outcomes are vectors not binary success labels',()=>{const x=outcomeVector(historicalLearningSeed[0]);assert.ok(Object.keys(x).length>=7);assert.notEqual(x.directGoal,x.information)});
