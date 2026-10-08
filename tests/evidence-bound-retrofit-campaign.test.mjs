@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {bindEvidence,planCampaign,independentEvidenceRoots,evidenceBoundCampaignInvariant} from '../dist/science/evidenceBoundRetrofitCampaign.js';
+const pkg=(measures)=>({id:'p',archetype:'DETACHED_HOUSE',measures,evidenceRefs:[],capexEur:0,embodiedCarbonKg:0});
+const ev=(measure,root='r1')=>({measure,parameter:'effect',min:1,max:3,unit:'index',evidenceRef:'doi:x',provenanceRoot:root});
+test('advanced materials fail closed without evidence',()=>{const x=bindEvidence(pkg(['PCM_GEL','AIR_SOURCE_HP']),[],['w1','w2'],[1,2]);assert.equal(x.status,'HOLD');assert.ok(x.reasons.includes('missing_evidence:PCM_GEL'))});
+test('traceable evidence plus multi-weather multi-seed makes candidate ready',()=>{const x=bindEvidence(pkg(['PCM_GEL','AIR_SOURCE_HP']),[ev('PCM_GEL')],['w1','w2'],[1,2]);assert.equal(x.status,'READY');assert.equal(x.parameters['PCM_GEL.effect'],2)});
+test('campaign planner counts actual weather seed runs only for ready candidates',()=>{const a=bindEvidence(pkg(['AIR_SOURCE_HP']),[],['w1','w2','w3'],[1,2]);const b=bindEvidence(pkg(['NANO_COOL_COATING']),[],['w1','w2'],[1,2]);const p=planCampaign('DETACHED_HOUSE',[a,b]);assert.equal(p.readyCount,1);assert.equal(p.heldCount,1);assert.equal(p.runCount,6)});
+test('provenance independence counts roots rather than papers or domains',()=>{assert.equal(independentEvidenceRoots([ev('PCM_GEL','root-a'),ev('PCM_GEL','root-a'),ev('PCM_GEL','root-b')]),2)});
+test('literature parameters never become observed building performance',()=>{assert.equal(evidenceBoundCampaignInvariant.literatureValueIsNotMeasuredBuildingPerformance,true);assert.equal(evidenceBoundCampaignInvariant.simulationCannotPromoteToObserved,true)});
