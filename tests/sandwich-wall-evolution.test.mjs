@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {evolveSandwiches,positionAblations,sandwichPareto,sandwichEvolutionInvariant} from '../dist/science/sandwichWallEvolution.js';
+const prop={conductivityWmK:.04,densityKgM3:100,specificHeatJkgK:1500,embodiedCarbonKgM3:20,costEurM3:100,evidenceRef:'e',provenanceRoot:'r'};
+const g=(role,material,opts)=>({role,material,thicknessOptionsMm:opts,properties:prop});
+test('evolution crosses layer thickness genes',()=>{const x=evolveSandwiches([g('INSULATION','WOOD_FIBER',[80,160]),g('THERMAL_BUFFER','PCM_COMPOSITE',[20,40])]);assert.equal(x.length,4);assert.ok(x.every(y=>y.wall.truthState==='SIMULATED'))});
+test('search is bounded',()=>{const x=evolveSandwiches([g('INSULATION','WOOD_FIBER',[40,80,120]),g('THERMAL_BUFFER','PCM_COMPOSITE',[10,20,30]),g('SERVICE','CELLULOSE',[20,40])],5);assert.ok(x.length<=5)});
+test('thermal buffer position produces ablation candidates',()=>{const [x]=evolveSandwiches([g('INSULATION','WOOD_FIBER',[80]),g('THERMAL_BUFFER','PCM_COMPOSITE',[20]),g('STRUCTURAL','BAMBOO_COMPOSITE',[80])]);assert.equal(positionAblations(x).length,2)});
+test('pareto removes dominated sandwich',()=>{const [a]=evolveSandwiches([g('INSULATION','WOOD_FIBER',[80])]);const b={...a,id:'b',wall:{...a.wall,id:'b',uValueWm2K:a.wall.uValueWm2K/2,materialCostEurM2:a.wall.materialCostEurM2/2,embodiedCarbonKgM2:a.wall.embodiedCarbonKgM2/2,arealHeatCapacityKJm2K:a.wall.arealHeatCapacityKJm2K*2}};assert.deepEqual(sandwichPareto([a,b]).map(x=>x.id),['b'])});
+test('static wall math cannot claim PCM placement benefit',()=>{assert.equal(sandwichEvolutionInvariant.pcmPositionNeedsAnnualDynamicModel,true);assert.equal(sandwichEvolutionInvariant.physicalClaim,false)});
