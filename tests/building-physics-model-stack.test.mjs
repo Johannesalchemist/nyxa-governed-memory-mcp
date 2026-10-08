@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {physicsCoverage,validatedPhysicsBindings,physicsStackGate} from '../dist/science/buildingPhysicsModelStack.js';
+test('ventilated cool composite wall pulls airflow radiation convection and moisture physics',()=>{const x=physicsCoverage(['VENTILATED_CAVITY','COOL_SKIN','composite-wall','external-skin']);for(const m of ['VENTILATED_CAVITY_AIRFLOW','SHORTWAVE_SOLAR','LONGWAVE_RADIOSITY','EXTERIOR_CONVECTION','HEAT_MOISTURE_HAMT'])assert.ok(x.models.includes(m))});
+test('stack uses EnergyPlus and Modelica rather than homebrew surrogate alone',()=>{const x=physicsCoverage(['whole-building','annual-coupled-twin']);assert.ok(x.backends.includes('ENERGYPLUS'));assert.ok(x.backends.includes('MODELICA_BUILDINGS'))});
+test('every binding has evidence and validation contract',()=>{assert.ok(validatedPhysicsBindings.every(x=>x.evidenceRef&&x.validation))});
+test('building-specific claim requires measured calibration',()=>{assert.equal(physicsStackGate.measuredCalibrationRequiredForBuildingSpecificClaim,true);assert.equal(physicsStackGate.physicalClaim,false)});
