@@ -62,3 +62,16 @@ test('HTTP failure stays visible beside successful participant',async()=>{
 test('invalid evidence references are rejected before requests',()=>{
  assert.throws(()=>parseNewsroomInput({prompt:'Assess',evidence_refs:[42]}),/evidence_refs_invalid/);
 });
+test('explicit pinned model is used exactly and remains provenance checked',async()=>{
+ const originalFetch=globalThis.fetch, originalKey=process.env.OPENROUTER_API_KEY;
+ process.env.OPENROUTER_API_KEY='fixture-only-not-a-credential';
+ globalThis.fetch=async(url,options)=>url.endsWith('/models')?Response.json({data:[{id:'openai/a',architecture:{input_modalities:['text']}},{id:'openai/b',architecture:{input_modalities:['text']}}]}):Response.json(body(JSON.parse(options.body).model));
+ try { const r=await consultNewsroom(parseNewsroomInput({prompt:'Assess',participants:['openai'],pinned_models:{openai:'openai/b'}})); assert.equal(r.contributions[0].requested_model,'openai/b');assert.equal(r.contributions[0].actual_model,'openai/b');assert.equal(r.anti_phantom_pass,true); }
+ finally {globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.OPENROUTER_API_KEY;else process.env.OPENROUTER_API_KEY=originalKey;}
+});
+test('unavailable pinned model fails closed without substitution',async()=>{
+ const originalFetch=globalThis.fetch, originalKey=process.env.OPENROUTER_API_KEY;process.env.OPENROUTER_API_KEY='fixture-only-not-a-credential';
+ globalThis.fetch=async(url)=>Response.json({data:[{id:'openai/a',architecture:{input_modalities:['text']}}]});
+ try {const r=await consultNewsroom(parseNewsroomInput({prompt:'Assess',participants:['openai'],pinned_models:{openai:'openai/missing'}}));assert.equal(r.contributions[0].status,'failed');assert.equal(r.contributions[0].error_code,'no_capable_model_available');}
+ finally{globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.OPENROUTER_API_KEY;else process.env.OPENROUTER_API_KEY=originalKey;}
+});

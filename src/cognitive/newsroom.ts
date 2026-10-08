@@ -10,6 +10,7 @@ export type NewsroomInput = {
   modality?: NewsroomModality;
   input_refs?: string[];
   evidence_refs?: string[];
+  pinned_models?: Partial<Record<NewsroomParticipant, string>>;
 };
 
 export type NewsroomContribution = {
@@ -71,7 +72,14 @@ export function parseNewsroomInput(payload: Record<string, unknown> | undefined)
     }
     return [...new Set(value as string[])];
   };
-  return { prompt: prompt.trim(), participants, modality: resolvedModality, input_refs: refs("input_refs"), evidence_refs: refs("evidence_refs") };
+  const pinned = payload?.["pinned_models"];
+  if (pinned !== undefined && (!pinned || typeof pinned !== "object" || Array.isArray(pinned))) throw new Error("newsroom_pinned_models_invalid");
+  const pinned_models: Partial<Record<NewsroomParticipant,string>> = {};
+  for (const [family, model] of Object.entries((pinned ?? {}) as Record<string,unknown>)) {
+    if (!isModelFamily(family) || !participants.includes(family) || typeof model !== "string" || !model.trim()) throw new Error("newsroom_pinned_model_invalid");
+    pinned_models[family] = model.trim();
+  }
+  return { prompt: prompt.trim(), participants, modality: resolvedModality, input_refs: refs("input_refs"), evidence_refs: refs("evidence_refs"), pinned_models };
 }
 
 async function callOpenRouter(
@@ -168,7 +176,8 @@ export async function consultNewsroom(input: NewsroomInput): Promise<Record<stri
   const modality = input.modality ?? "text";
     const catalog = await loadCatalog();
     const contributions = await Promise.all(input.participants.map((participant) => {
-      const model = selectModel(catalog, participant, modality);
+      const pinned = input.pinned_models?.[participant];
+      const model = pinned && catalog.some((entry) => entry.id === pinned) ? pinned : pinned ? undefined : selectModel(catalog, participant, modality);
       if (!model) {
         const now = new Date().toISOString();
         return Promise.resolve<NewsroomContribution>({
