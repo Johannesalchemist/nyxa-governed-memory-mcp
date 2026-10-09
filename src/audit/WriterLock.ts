@@ -96,7 +96,7 @@ export class WriterLock {
   }
 
   private probeLive(): Promise<boolean> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const socket = createConnection(this.sockPath);
       const finish = (result: boolean) => {
         socket.removeAllListeners();
@@ -104,7 +104,16 @@ export class WriterLock {
         resolve(result);
       };
       socket.once("connect", () => finish(true));
-      socket.once("error", () => finish(false));
+      socket.once("error", (error: NodeJS.ErrnoException) => {
+        // Only absence/refusal proves a stale endpoint. Permission/filter/resource
+        // failures do not prove the owner is gone; never unlink a live lock then.
+        if (error.code === "ECONNREFUSED" || error.code === "ENOENT") finish(false);
+        else {
+          socket.removeAllListeners();
+          socket.destroy();
+          reject(new WriterLockError("writer_lock_probe_uncertain:" + (error.code ?? "UNKNOWN")));
+        }
+      });
     });
   }
 }

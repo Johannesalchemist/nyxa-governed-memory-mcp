@@ -92,7 +92,19 @@ test("D/I real: no grant file currently exists on this host -> real CLI fails cl
 
 test("J real: a grant file with untrusted (group/other-writable) permissions is rejected before any decision logic runs", (t) => {
   assert.equal(existsSync(GRANT_PATH), false, "precondition: no live grant should exist for this test");
-  try { mkdirSync("/etc/nyxa", { recursive: true }); writeFileSync(GRANT_PATH, "probe", { mode: 0o600 }); rmSync(GRANT_PATH, { force: true }); } catch (e) { if (e?.code === "EACCES") { t.skip("host account cannot write /etc/nyxa"); return; } throw e; }
+  if (process.env.NYXA_CANARY_ISOLATED !== "1") {
+    const file = new URL("./canary-executor.test.mjs", import.meta.url).pathname;
+    const isolatedEnv = { ...process.env };
+    delete isolatedEnv.NODE_TEST_CONTEXT;
+    const result = spawnSync("unshare", ["--user", "--map-root-user", "--mount", "--net", "--", "/bin/sh", "-c",
+      'mount --make-rprivate / && mount -t tmpfs -o size=4096k tmpfs /etc && mount -t tmpfs -o size=4096k tmpfs /var && exec env NYXA_CANARY_ISOLATED=1 /usr/bin/node --test --test-name-pattern="^J real" "$1"',
+      "canary-isolated", file], { encoding: "utf8", timeout: 15000, env: isolatedEnv });
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /ok .*J real/);
+    assert.doesNotMatch(result.stdout, /# SKIP/);
+    return;
+  }
+  mkdirSync("/etc/nyxa", { recursive: true });
   const badGrant = { ...baseGrant, entries: [{ ...baseGrant.entries[0], nonce: "realnoncebadperm001" }] };
   writeFileSync(GRANT_PATH, JSON.stringify(badGrant), { mode: 0o666 });
   chmodSync(GRANT_PATH, 0o666); // world-writable on purpose: this is the attack this check exists for

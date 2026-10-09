@@ -276,34 +276,32 @@ test("sandbox: orphan/daemon teardown -- a detached grandchild does not survive 
 
 // --- Schritt 7.5 independent-review findings ---------------------------------------
 
-function hasPasswordlessSudo() {
-  return spawnSync("sudo", ["-n", "true"]).status === 0;
-}
-
-test("sandbox: a nested submount under a mandatory read-only path is itself made read-only, not left writable", { skip: !hasPasswordlessSudo() && "requires passwordless sudo to create a real global nested mount (nyxamcp, the normal test-running account, has none by design -- run as a sudo-capable user to exercise this test)" }, async () => {
-  const root = await mkdtemp(join(tmpdir(), "nyxa-sandbox-nestedmount-"));
-  await initRepo(root);
-  const nestedMountPoint = await mkdtemp(join(tmpdir(), "nyxa-sandbox-realnested-"));
-  execFileSync("sudo", ["mount", "-t", "tmpfs", "-o", "size=1024k", "tmpfs", nestedMountPoint]);
-  try {
-    const probeFile = join(root, "probe.cjs");
-    await writeFile(probeFile, [
-      'const fs=require("fs");',
-      `try{fs.writeFileSync("${join(nestedMountPoint, "probe.txt")}","x");console.log(JSON.stringify({nested:"ALLOWED"}));}`,
-      'catch(e){console.log(JSON.stringify({nested:"DENIED",code:e.code}));}'
-    ].join("\n"), "utf8");
-    const connector = new SecureConnector(baseConfig(root, target("nestedmountprobe", "probe.cjs", root)), join(root, "audit-data"));
-    const result = await connector.runTest("nestedmountprobe");
-    const parsed = JSON.parse(result.data.stdout.trim());
-    assert.equal(parsed.nested, "DENIED");
-    assert.equal(parsed.code, "EROFS");
-    await access(join(nestedMountPoint, "probe.txt")).then(
-      () => assert.fail("a file must not exist on the real nested mount after a denied sandboxed write attempt"),
-      () => undefined
-    );
-  } finally {
-    execFileSync("sudo", ["umount", nestedMountPoint]).toString();
-  }
+test("sandbox: isolated nested submount is read-only inside the target without host privilege", async () => {
+  const root = await mkdtemp(join(tmpdir(), "nyxa-sandbox-nested-root-"));
+  const nested = await mkdtemp(join(tmpdir(), "nyxa-sandbox-nested-mount-"));
+  const module = new URL("../dist/connector/SecureConnector.js", import.meta.url).href;
+  const inner = [
+    'import assert from "node:assert/strict";',
+    'import {writeFile,readFile,access} from "node:fs/promises";',
+    'import {join} from "node:path";',
+    'import {SecureConnector} from '+JSON.stringify(module)+';',
+    'const baseConfig='+baseConfig.toString()+';',
+    'const target='+target.toString()+';',
+    'const root='+JSON.stringify(root)+';const nested='+JSON.stringify(nested)+';',
+    'await writeFile(join(nested,"control"),"HOST_NAMESPACE_WRITABLE");',
+    'assert.equal(await readFile(join(nested,"control"),"utf8"),"HOST_NAMESPACE_WRITABLE");',
+    'await writeFile(join(root,"probe.cjs"),'+JSON.stringify('const fs=require("fs");try{fs.writeFileSync('+JSON.stringify(join(nested,"probe.txt"))+',"x");console.log("ALLOWED")}catch(e){console.log(e.code)}')+');',
+    'const connector=new SecureConnector(baseConfig(root,target("nestedprobe","probe.cjs",root,{timeoutMs:15000})),join(root,"audit"));',
+    'const result=await connector.runTest("nestedprobe");',
+    'assert.equal(result.data.stdout.trim(),"EROFS",JSON.stringify(result));',
+    'await assert.rejects(access(join(nested,"probe.txt")));',
+    'console.log("REAL_NESTED_MOUNT_DENIED");'
+  ].join("\n");
+  const result = spawnSync("unshare", ["--user","--map-root-user","--mount","--net","--","/bin/sh","-c",
+    'mount --make-rprivate / && mount -t tmpfs -o size=1024k tmpfs "$1" && exec /usr/bin/node --input-type=module -e "$2"',
+    "nested-isolated", nested, inner], {encoding:"utf8",timeout:25000});
+  assert.equal(result.status,0,result.stderr+result.stdout);
+  assert.match(result.stdout,/REAL_NESTED_MOUNT_DENIED/);
 });
 
 test("sandbox: a socket-masking failure fails closed (the target never starts), not silently ignored", async () => {
