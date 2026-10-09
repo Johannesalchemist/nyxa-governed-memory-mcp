@@ -42,7 +42,9 @@ test('ELM-001 connects allowlisted source retrieval to routed research without u
  let calls=0;
  const provider=new PrimarySourceResearchProvider([source],async (_url,opts)=>{
    calls++;assert.equal(opts.redirect,'error');
-   return new Response('Untrusted source content, not a validated claim',{headers:{'content-type':'text/plain'}});
+   const response=new Response('Untrusted source content, not a validated claim',{headers:{'content-type':'text/plain'}});
+   Object.defineProperty(response,'url',{value:source});
+   return response;
  });
  const routed=new ResearchProviderRegistry({jevProviderId:'primary',externalProviderIds:[]}).register({id:'primary',provider,external:false,modelVersion:'primary-source-readonly-v1'});
  const finding=await new RoutedResearchProvider(routed,'LOCAL_JEV').research(request(0));
