@@ -19,9 +19,9 @@
 #     catch-all loop covers whatever top-level directories remain (see
 #     "Known Non-Goals" in the design doc); a failure there is logged, not
 #     fatal, because nothing security-relevant remains in that bucket.
-#   - fresh /proc and /sys: mounted fresh inside the new pid+mount+user+net
-#     namespace rather than left as inherited bind-throughs, so they reflect
-#     THIS namespace, not the host's. Both are on the fail-closed list.
+#   - fresh /proc and offline /sys reflect their new namespaces. Online
+#     targets keep the configured host network route but receive an empty,
+#     read-only tmpfs at /sys. Both setup paths are fail-closed.
 #   - masked /dev: a fresh, minimal tmpfs, populated only with bind-mounts of
 #     the specific host device nodes actually needed (null, zero, full,
 #     random, urandom, tty) -- the full host /dev listing (other ttys, block
@@ -203,7 +203,17 @@ exec unshare --user --map-root-user --mount --pid --fork --kill-child=SIGKILL $N
   esac
 
   mount -t proc -o ro,nosuid,nodev,noexec proc /proc 2>/dev/null || { echo "sandbox_mount_setup_failed:proc" >&2; exit 92; }
-  mount -t sysfs -o ro,nosuid,nodev,noexec sysfs /sys 2>/dev/null || { echo "sandbox_mount_setup_failed:sysfs" >&2; exit 92; }
+  if [ "$FILTER_MODE" = "net" ]; then
+    # A fresh sysfs mount is refused with the shared host network namespace
+    # on the tested unprivileged user-namespace configuration. Online targets
+    # receive no host sysfs view: mask it with an empty read-only tmpfs.
+    # Failure remains fatal; no inherited sysfs bind-through fallback.
+    mount -t tmpfs -o size=1024k,mode=0555,ro,nosuid,nodev,noexec tmpfs /sys 2>/dev/null \
+      || { echo "sandbox_mount_setup_failed:sys_mask" >&2; exit 92; }
+  else
+    mount -t sysfs -o ro,nosuid,nodev,noexec sysfs /sys 2>/dev/null \
+      || { echo "sandbox_mount_setup_failed:sysfs" >&2; exit 92; }
+  fi
 
   # Scratch is mounted BEFORE /dev is masked, specifically so it can hold a
   # stash of bind-mounted references to the real host device nodes. Once /dev
