@@ -127,12 +127,15 @@ if ! unshare --user --map-root-user --mount --pid --fork --kill-child=SIGKILL $N
   exit 95
 fi
 
+FILTER_EXE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/../dist/nyxa-sandbox-filter"
+[ -x "$FILTER_EXE" ] || { echo "sandbox_filter_unavailable" >&2; exit 96; }
+
 NNP=""
 command -v setpriv >/dev/null 2>&1 && NNP="setpriv --no-new-privs --"
 
 exec unshare --user --map-root-user --mount --pid --fork --kill-child=SIGKILL $NET_FLAG -- /bin/bash -c '
   set -eu
-  SCRATCH_DIR="$1"; SCRATCH_KB="$2"; MEM_KB="$3"; NPROC="$4"; CPU_SEC="$5"; EXTRA_RO="$6"; NNP="$7"; shift 7
+  SCRATCH_DIR="$1"; SCRATCH_KB="$2"; MEM_KB="$3"; NPROC="$4"; CPU_SEC="$5"; EXTRA_RO="$6"; NNP="$7"; FILTER_EXE="$8"; FILTER_MODE="$9"; shift 9
 
   mount --make-rprivate / 2>/dev/null || { echo "sandbox_mount_setup_failed:rprivate" >&2; exit 92; }
 
@@ -453,31 +456,11 @@ exec unshare --user --map-root-user --mount --pid --fork --kill-child=SIGKILL $N
   ulimit -u "$NPROC" || { echo "sandbox_ulimit_rejected:nproc" >&2; exit 94; }
   ulimit -t "$CPU_SEC" || { echo "sandbox_ulimit_rejected:cpu" >&2; exit 94; }
 
-  # Best-effort mitigation against a socket created by OTHER host activity
-  # AFTER the fail-closed initial pass above: a bind mount is a live view of
-  # the same underlying directory, not a frozen snapshot, so a brand-new
-  # socket appearing later at a visible path is not caught by the one-time
-  # find pass. A background loop, re-scanning and re-masking every
-  # POLL_INTERVAL, bounds this window instead of leaving it fully open --
-  # this is NOT an architectural guarantee (a true snapshot would require
-  # copying every mandatory tree, impractical here for /usr, /var scale), and
-  # it is documented as such, not oversold. Started BEFORE the capability
-  # drop below so it retains the CAP_SYS_ADMIN it needs to keep masking;
-  # the target process itself gets none. Known residual gap: the target
-  # shares this pid namespace and the same real uid, so it CAN discover and
-  # kill this watcher via /proc -- documented, not hidden.
-  POLL_INTERVAL="0.2"
-  (
-    while :; do
-      for d in /tmp /opt /etc /home /var /usr /root /run "$EXTRA_RO"; do
-        [ "$d" = "-" ] && continue
-        [ -d "$d" ] || continue
-        mask_sockets_under "$d" 0
-      done
-      sleep "$POLL_INTERVAL" 2>/dev/null || sleep 1
-    done
-  ) 2>/dev/null &
-  WATCHER_PID=$!
+  # Kernel filter replaces the racy, killable masking watcher. The filter
+  # is inherited by every descendant and cannot be removed after exec.
+  # nonet forbids outbound connect/sendto/sendmsg/sendmmsg; net forbids
+  # AF_UNIX socket creation. Both block io_uring and alternative syscall ABIs.
+  # Local socketpair IPC and ordinary pipe-based child processes still work.
 
   # Drop EVERY capability -- bounding, effective, permitted, inheritable and
   # ambient -- from the target process, not a curated subset. A regular git
@@ -511,11 +494,10 @@ exec unshare --user --map-root-user --mount --pid --fork --kill-child=SIGKILL $N
     *) cd "$EXTRA_RO" 2>/dev/null || { echo "sandbox_cwd_refresh_failed:$EXTRA_RO" >&2; exit 92; } ;;
   esac
   if [ -n "$NNP" ]; then
-    capsh --drop="$ALL_CAPS" -- -c "exec $NNP \"\$@\"" sandbox-exec "$@"
+    capsh --drop="$ALL_CAPS" -- -c "exec $NNP \"$FILTER_EXE\" \"$FILTER_MODE\" -- \"\$@\"" sandbox-exec "$@"
   else
-    capsh --drop="$ALL_CAPS" -- -c "exec \"\$@\"" sandbox-exec "$@"
+    capsh --drop="$ALL_CAPS" -- -c "exec \"$FILTER_EXE\" \"$FILTER_MODE\" -- \"\$@\"" sandbox-exec "$@"
   fi
   TARGET_EXIT=$?
-  kill "$WATCHER_PID" 2>/dev/null
   exit "$TARGET_EXIT"
-' sandbox-inner "$SCRATCH_DIR" "$SCRATCH_KB" "$MEM_KB" "$NPROC" "$CPU_SEC" "$EXTRA_RO" "$NNP" "$@"
+' sandbox-inner "$SCRATCH_DIR" "$SCRATCH_KB" "$MEM_KB" "$NPROC" "$CPU_SEC" "$EXTRA_RO" "$NNP" "$FILTER_EXE" "$NET_MODE" "$@"

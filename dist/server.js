@@ -32,6 +32,8 @@ import { kernelDispatchGate } from "./governance/kernelDispatchGate.js";
 import { evaluateC0 } from "./governance/c0.js";
 import { SelfModelStore } from "./self-model/store.js";
 import { CandidateStore } from "./memory/candidateStore.js";
+import { researchBridge } from "./epistemic/researchBridge.js";
+import { discoveryCandidateFromE0, discoveryQuestionId, buildDiscoveryStoreProposal, findExistingDiscoveryCandidate } from "./epistemic/discoveryCandidate.js";
 import { LearningEvidenceStore } from "./cognitive/learningEvidenceStore.js";
 import { consultNewsroom, parseNewsroomInput } from "./cognitive/newsroom.js";
 import { buildControlRoomEnvelope } from "./cognitive/controlRoom.js";
@@ -171,6 +173,7 @@ const SELF_MODEL_TOOLS = [
 // nyxa_dream_trigger) are proposal actions dispatched via nyxa_propose_action -- see
 // GOVERNANCE_TOOLS and executeAllowedProposal -- not separate tools, matching how self-model
 // writes work. Only recall is a direct tool, matching nyxa_self_model_read.
+const RESEARCH_TOOLS = [{ name: "nyxa_research_depth_drill", description: "Read-only bounded primary-source retrieval and E0 reassessment. Never authorizes writes or promotes evidence.", inputSchema: objectSchema({ packet: { type: "object" }, sources: { type: "array", items: stringSchema(2048), minItems: 1, maxItems: 4 } }, ["packet", "sources"]), annotations: READ_ANNOTATIONS }];
 const MEMORY_TOOLS = [
     {
         name: "nyxa_memory_recall_candidates",
@@ -542,7 +545,7 @@ export class NyxaGovernedMemoryServer {
                 }, ["tenant_id", "organization_id", "audit_id"]),
                 annotations: READ_ANNOTATIONS
             };
-            const allTools = [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...TOOLBOX_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...MEMORY_TOOLS, companyAuditReadTool, ...HUMAN_AUTHORITY_TOOLS, ...OBSERVABILITY_TOOLS];
+            const allTools = [...LEGACY_TOOLS, ...CONNECTOR_TOOLS, ...TOOLBOX_TOOLS, ...GOVERNANCE_TOOLS, ...SELF_MODEL_TOOLS, ...MEMORY_TOOLS, ...RESEARCH_TOOLS, companyAuditReadTool, ...HUMAN_AUTHORITY_TOOLS, ...OBSERVABILITY_TOOLS];
             const profile = this.config.toolProfile;
             return { tools: allTools.filter(tool => (!profile.active || profile.allowed.has(tool.name)) && this.companyAuthority.permitsTool(tool.name)) };
         });
@@ -584,6 +587,17 @@ export class NyxaGovernedMemoryServer {
             if (name === "nyxa_self_model_read") {
                 assertKeys(input, ["domain", "limit"]);
                 return await this.handleSelfModelRead(input);
+            }
+            if (name === "nyxa_research_depth_drill") {
+                assertKeys(input, ["packet", "sources"]);
+                if (this.config.agentMode === "observe_only")
+                    return toolJsonResult({ policy_decision: "DENY", reason: "research_requires_draft_mode" }, true);
+                try {
+                    return toolJsonResult(await researchBridge(input.packet, input.sources));
+                }
+                catch {
+                    return toolJsonResult({ error: "research_failed_or_invalid", epistemic_authority: "NONE" }, true);
+                }
             }
             if (name === "nyxa_memory_recall_candidates") {
                 assertKeys(input, ["status", "candidate_type", "limit"]);
@@ -979,12 +993,32 @@ export class NyxaGovernedMemoryServer {
         }
         const epistemic = assessEpistemicStateSafely(`${proposal.provenance.taskId}:${proposal.provenance.runId}`, `${proposal.action} ${proposal.target}`, proposal.claims, proposal.uncertainty, toolPolicy, undefined, undefined, epistemicTrustedContext);
         if (epistemic.ran && epistemic.held) {
+            // Return an inert, schema-valid proposal payload for a SEPARATE governed
+            // nyxa_memory_store_candidate call. HOLD itself never writes memory.
+            const discoveryId = discoveryQuestionId(proposal.action, proposal.target, proposal.claims);
+            const discoveryCandidate = epistemic.failed ? undefined : discoveryCandidateFromE0(discoveryId, `${proposal.action} ${proposal.target}`, epistemic.result);
+            // Read-only discovery recall: no pending candidate is treated as verified evidence.
+            // If recall fails, fail closed on deduplication rather than proposing duplicates.
+            let discoveryRecallFailed = false;
+            let existingDiscoveryId;
+            if (discoveryCandidate) {
+                try {
+                    const pending = await this.candidateStore.recallCandidates({ status: "pending", candidateType: "open_question", limit: 200 });
+                    existingDiscoveryId = findExistingDiscoveryCandidate(discoveryId, pending)?.id;
+                }
+                catch {
+                    discoveryRecallFailed = true;
+                }
+            }
             const epistemicClassification = epistemic.failed ? "E0_INTERNAL_FAILURE" : epistemic.result.classification;
             await this.auditGovernance("blocked", toolPolicy?.capabilityClass, "HELD", started, "epistemic_insufficiency", affectedResource, { outcome: decision.outcome, domain: decision.domain, reason: decision.reason }, undefined, c0, humanGrantCheck, { classification: epistemicClassification, hold: true });
             return toolJsonResult({
                 policy_decision: "HELD",
                 reason: "epistemic_insufficiency",
                 proposed_action: proposal.action,
+                ...(existingDiscoveryId ? { existing_discovery_candidate_id: existingDiscoveryId, discovery_status: "pending_research" } : {}),
+                ...(discoveryRecallFailed ? { discovery_status: "recall_unavailable" } : {}),
+                ...(discoveryCandidate && !existingDiscoveryId && !discoveryRecallFailed ? { discovery_candidate_proposal: { proposal: buildDiscoveryStoreProposal(proposal, discoveryCandidate), requires_separate_gamma_approval: true } } : {}),
                 epistemic: epistemic.failed
                     ? { classification: epistemicClassification, internal_failure: true }
                     : { classification: epistemic.result.classification, residual_uncertainty: epistemic.result.residual_uncertainty, reasons: epistemic.result.reasons }
