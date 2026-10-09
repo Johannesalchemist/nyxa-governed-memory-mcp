@@ -88,6 +88,9 @@ export async function runDepthDrill(
 ): Promise<DepthDrillOutcome> {
   const runId = randomUUID();
   const startedAt = Date.now();
+  let meteredToolCalls = 0;
+  const effectiveLimit = budget.max_iterations;
+  const exhausted = () => Date.now() - startedAt >= budget.max_wall_time_ms;
   const evidenceGraph: DepthDrillEvidenceGraph = {
     supporting: [],
     disconfirming: [],
@@ -99,27 +102,43 @@ export async function runDepthDrill(
 
   let current = e0Triage(initialInput, thresholds);
   if (!current.trigger_depth_drill) {
-    return { run_id: runId, final: current, iterations_used: 0, stopping_reason: "resolved", evidence_graph: evidenceGraph, budget, tool_calls_used: 0 };
+    return { run_id: runId, final: current, iterations_used: 0, stopping_reason: "resolved", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
   }
 
+  if (budget.max_research_agents < 1 || budget.max_iterations < 1 || budget.max_wall_time_ms <= 0 || budget.max_tool_calls < 0) return { run_id: runId, final: current, iterations_used: 0, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: 0 };
   let input = initialInput;
   let iterations = 0;
   let lastSignature = signatureOf(current);
   let noGainStreak = 0;
 
-  while (iterations < budget.max_iterations) {
-    if (Date.now() - startedAt > budget.max_wall_time_ms) {
-      return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: 0 };
+  // One sequential provider instance; max_research_agents limits concurrent agents, not rounds.
+  while (iterations < effectiveLimit) {
+    if (exhausted()) {
+      return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
     }
 
     iterations += 1;
-    const finding = await provider.research({
+    const remaining = budget.max_wall_time_ms - (Date.now() - startedAt);
+    if (remaining <= 0) return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finding = await Promise.race([Promise.resolve().then(() => provider.research({
       claim_id: input.claim_id,
       statement: input.statement,
       evidence_packet: input,
-      prior_alternative_hypotheses: evidenceGraph.hypotheses
-    });
+      prior_alternative_hypotheses: evidenceGraph.hypotheses,
+      signal: controller.signal
+    })), new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("E0_RESEARCH_TIMEOUT")); }, remaining); })]).catch((error: unknown) => {
+      if (error instanceof Error && error.message === "E0_RESEARCH_TIMEOUT") return null;
+      throw error;
+    }).finally(() => { if (timer) clearTimeout(timer); });
+    if (finding === null || exhausted()) return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
 
+    // Fail closed when the provider cannot attest its internal tool usage.
+    const used = finding.tool_calls_used;
+    if (budget.max_tool_calls > 0 && (!Number.isSafeInteger(used) || used === undefined || used < 0)) return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
+    if (used !== undefined && (!Number.isSafeInteger(used) || used < 0 || meteredToolCalls + used > budget.max_tool_calls)) return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
+    meteredToolCalls += used ?? 0;
     evidenceGraph.supporting.push(...finding.supporting_evidence);
     evidenceGraph.disconfirming.push(...finding.disconfirming_evidence);
     evidenceGraph.hypotheses.push(...finding.alternative_hypotheses);
@@ -129,7 +148,7 @@ export async function runDepthDrill(
 
     if (finding.requires_human_input) {
       const reassessed = e0Triage(input, thresholds);
-      return { run_id: runId, final: reassessed, iterations_used: iterations, stopping_reason: "human_input_required", evidence_graph: evidenceGraph, budget, tool_calls_used: 0 };
+      return { run_id: runId, final: reassessed, iterations_used: iterations, stopping_reason: "human_input_required", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
     }
 
     const updatedInput: E0ClaimInput = {
@@ -144,7 +163,7 @@ export async function runDepthDrill(
 
     if (!reassessed.trigger_depth_drill) {
       const stopping = reassessed.classification === "KNOWN" ? "resolved" : "bounded_known_unknown";
-      return { run_id: runId, final: reassessed, iterations_used: iterations, stopping_reason: stopping, evidence_graph: evidenceGraph, budget, tool_calls_used: 0 };
+      return { run_id: runId, final: reassessed, iterations_used: iterations, stopping_reason: stopping, evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
     }
 
     const newSignature = signatureOf(reassessed);
@@ -154,9 +173,9 @@ export async function runDepthDrill(
     input = updatedInput;
 
     if (noGainStreak >= budget.no_gain_stop_after) {
-      return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "no_information_gain", evidence_graph: evidenceGraph, budget, tool_calls_used: 0 };
+      return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "no_information_gain", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
     }
   }
 
-  return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: 0 };
+  return { run_id: runId, final: current, iterations_used: iterations, stopping_reason: "budget_exhausted", evidence_graph: evidenceGraph, budget, tool_calls_used: meteredToolCalls };
 }

@@ -226,7 +226,8 @@ test("K2: ResearchProvider interface receives no reference to any mutating store
   const input = baseClaim({ contradiction_score: 0.6, evidence_strength: 0.3, impact_score: 0.5 });
   await runDepthDrill(input, spyProvider, { ...DEFAULT_DEPTH_DRILL_BUDGET, max_iterations: 1 });
   const keys = Object.keys(capturedRequest).sort();
-  assert.deepEqual(keys, ["claim_id", "evidence_packet", "prior_alternative_hypotheses", "statement"].sort());
+  assert.deepEqual(keys, ["claim_id", "evidence_packet", "prior_alternative_hypotheses", "signal", "statement"].sort());
+  assert.equal(typeof capturedRequest.signal?.aborted, "boolean");
   // None of these are AuditLog/CandidateStore/HumanGrantStore/SecureConnector instances --
   // they are plain data (string, string, object, array).
   assert.equal(typeof capturedRequest.claim_id, "string");

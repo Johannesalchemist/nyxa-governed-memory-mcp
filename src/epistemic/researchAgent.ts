@@ -23,6 +23,8 @@ export type ResearchRequest = {
   statement: string;
   evidence_packet: E0ClaimInput;
   prior_alternative_hypotheses?: string[];
+  /** Provider must propagate cancellation to every downstream operation. */
+  signal?: AbortSignal;
 };
 
 export type ResearchFinding = {
@@ -39,6 +41,8 @@ export type ResearchFinding = {
   updated_anomaly_score?: number;
   updated_provenance_quality?: number;
   requires_human_input?: boolean;
+  /** Metered provider-internal tool calls; mandatory for nonzero tool budgets. */
+  tool_calls_used?: number;
 };
 
 export type ResearchProvider = {
