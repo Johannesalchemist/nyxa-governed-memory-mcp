@@ -33,3 +33,42 @@ test('ELM-001 ratchet blocks unverified synthetic improvements',()=>{
  assert.equal(evaluateLearningRatchet({...input,independentVerificationPassed:true}).outcome,'RETAIN_CANDIDATE');
  assert.equal(evaluateLearningRatchet({...input,independentVerificationPassed:true,candidate:{...candidate,authority:1}}).outcome,'HOLD');
 });
+
+// Read-only primary-source retrieval and independent evidence ledger remain separate
+// from authority-bearing candidate promotion. All I/O is local and isolated.
+test('ELM-001 connects allowlisted source retrieval to routed research without upgrading retrieval to truth',async()=>{
+ const {PrimarySourceResearchProvider}=await import('../dist/epistemic/primarySourceResearch.js');
+ const source='https://ec.europa.eu/elm-001';
+ let calls=0;
+ const provider=new PrimarySourceResearchProvider([source],async (_url,opts)=>{
+   calls++;assert.equal(opts.redirect,'error');
+   return new Response('Untrusted source content, not a validated claim',{headers:{'content-type':'text/plain'}});
+ });
+ const routed=new ResearchProviderRegistry({jevProviderId:'primary',externalProviderIds:[]}).register({id:'primary',provider,external:false,modelVersion:'primary-source-readonly-v1'});
+ const finding=await new RoutedResearchProvider(routed,'LOCAL_JEV').research(request(0));
+ assert.equal(calls,1);
+ assert.equal(finding.supporting_evidence.length,0);
+ assert.equal(finding.disconfirming_evidence.length,0);
+ assert.equal(finding.requires_human_input,true);
+ assert.match(finding.provenance_refs[0],/ec.europa.eu/);
+ assert.equal('authority' in finding,false);
+});
+
+test('ELM-001 learning evidence ledger rejects echo and retains independently sourced candidates without promotion',async()=>{
+ const {mkdtemp}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');
+ const {join}=await import('node:path');
+ const {LearningEvidenceStore}=await import('../dist/cognitive/learningEvidenceStore.js');
+ const store=new LearningEvidenceStore(await mkdtemp(join(tmpdir(),'nyxa-elm-001-')));
+ await store.init();
+ const contribution=(id,role,source,modelId)=>({id,role,origin:'AI',claims:[{tag:'EXTERNAL_EVIDENCE',statement:'synthetic finding',source}],modelId,promptHash:`prompt-${id}`,parentIds:[]});
+ const roles=['EXPLORE','CHALLENGE','INDEPENDENT_ALTERNATIVE'];
+ for(const [id,unique] of [['echo',false],['independent',true]]){
+   await store.append({candidateId:id,contributions:roles.map((r,i)=>contribution(`${id}-${i}`,r,unique?`source-${i}`:'source-0',`model-${i}`))},{writtenBy:'elm-test',taskId:'elm-001',runId:`elm-${id}`});
+ }
+ const echo=await store.assessCandidate('echo');
+ const independent=await store.assessCandidate('independent');
+ assert.equal(echo.eligible,false);
+ assert.equal(independent.eligible,true);
+ assert.equal(independent.authorityEffect,'NONE');
+});
