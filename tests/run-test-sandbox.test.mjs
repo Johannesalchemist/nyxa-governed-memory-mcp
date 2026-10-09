@@ -355,7 +355,9 @@ test("sandbox: a Unix socket created by other host activity AFTER the sandbox st
     '}',
     'tryConnect();'
   ].join("\n"), "utf8");
-  const connector = new SecureConnector(baseConfig(root, target("latesockprobe", "probe.cjs", root, { timeoutMs: 8000 })), join(root, "audit-data"));
+  // Allow bounded sandbox setup time in addition to the probe's six-second observation window.
+  // The assertion still requires DENIED_THROUGHOUT; a timeout or successful connection fails.
+  const connector = new SecureConnector(baseConfig(root, target("latesockprobe", "probe.cjs", root, { timeoutMs: 15000 })), join(root, "audit-data"));
 
   const runPromise = connector.runTest("latesockprobe");
   await new Promise((r) => setTimeout(r, 1500));
