@@ -40,6 +40,7 @@ import { kernelDispatchGate } from "./governance/kernelDispatchGate.js";
 import { evaluateC0, type C0Decision } from "./governance/c0.js";
 import { SelfModelStore } from "./self-model/store.js";
 import { CandidateStore } from "./memory/candidateStore.js";
+import { discoveryCandidateFromE0, discoveryQuestionId, buildDiscoveryStoreProposal, findExistingDiscoveryCandidate } from "./epistemic/discoveryCandidate.js";
 import { LearningEvidenceStore } from "./cognitive/learningEvidenceStore.js";
 import { consultNewsroom, parseNewsroomInput } from "./cognitive/newsroom.js";
 import { buildControlRoomEnvelope } from "./cognitive/controlRoom.js";
@@ -1134,6 +1135,26 @@ export class NyxaGovernedMemoryServer {
       epistemicTrustedContext
     );
     if (epistemic.ran && epistemic.held) {
+      // Return an inert, schema-valid proposal payload for a SEPARATE governed
+      // nyxa_memory_store_candidate call. HOLD itself never writes memory.
+      const discoveryId = discoveryQuestionId(proposal.action, proposal.target, proposal.claims);
+      const discoveryCandidate = epistemic.failed ? undefined : discoveryCandidateFromE0(
+        discoveryId,
+        `${proposal.action} ${proposal.target}`,
+        epistemic.result
+      );
+      // Read-only discovery recall: no pending candidate is treated as verified evidence.
+      // If recall fails, fail closed on deduplication rather than proposing duplicates.
+      let discoveryRecallFailed = false;
+      let existingDiscoveryId: string | undefined;
+      if (discoveryCandidate) {
+        try {
+          const pending = await this.candidateStore.recallCandidates({ status: "pending", candidateType: "open_question", limit: 200 });
+          existingDiscoveryId = findExistingDiscoveryCandidate(
+            discoveryId, pending
+          )?.id;
+        } catch { discoveryRecallFailed = true; }
+      }
       const epistemicClassification = epistemic.failed ? "E0_INTERNAL_FAILURE" : epistemic.result.classification;
       await this.auditGovernance(
         "blocked",
@@ -1153,6 +1174,9 @@ export class NyxaGovernedMemoryServer {
           policy_decision: "HELD",
           reason: "epistemic_insufficiency",
           proposed_action: proposal.action,
+          ...(existingDiscoveryId ? { existing_discovery_candidate_id: existingDiscoveryId, discovery_status: "pending_research" } : {}),
+          ...(discoveryRecallFailed ? { discovery_status: "recall_unavailable" } : {}),
+          ...(discoveryCandidate && !existingDiscoveryId && !discoveryRecallFailed ? { discovery_candidate_proposal: { proposal: buildDiscoveryStoreProposal(proposal, discoveryCandidate), requires_separate_gamma_approval: true } } : {}),
           epistemic: epistemic.failed
             ? { classification: epistemicClassification, internal_failure: true }
             : { classification: epistemic.result.classification, residual_uncertainty: epistemic.result.residual_uncertainty, reasons: epistemic.result.reasons }
