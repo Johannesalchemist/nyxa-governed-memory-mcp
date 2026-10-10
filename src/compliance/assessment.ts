@@ -3,9 +3,9 @@ export type EvidenceRecord={kind:string; controlId?:string; verified?:boolean; t
 export type Assessment={controlId:string; framework:string; status:AssessmentStatus; matchedEvidence:string[]; missingEvidence:string[]};
 export function assessControl(control:Control, records:readonly EvidenceRecord[], notApplicable=false):Assessment {
  if(notApplicable) return {controlId:control.id,framework:control.framework,status:"NOT_APPLICABLE",matchedEvidence:[],missingEvidence:[]};
- const matched=control.evidence.filter(k=>records.some(r=>(!r.controlId||r.controlId===control.id)&&r.kind===k&&r.verified!==false));
+ const matched=control.evidence.filter(k=>records.some(r=>r.controlId===control.id&&r.kind===k&&r.verified===true));
  const missing=control.evidence.filter(k=>!matched.includes(k));
- const hasUnknown=records.some(r=>(!r.controlId||r.controlId===control.id)&&r.kind==="e0_record");
+ const hasUnknown=records.some(r=>r.controlId===control.id&&r.kind==="e0_record");
  const status:AssessmentStatus=hasUnknown?"E0":matched.length===0?"MISSING":missing.length?"PARTIAL":"SATISFIED";
  return {controlId:control.id,framework:control.framework,status,matchedEvidence:matched,missingEvidence:missing};
 }
