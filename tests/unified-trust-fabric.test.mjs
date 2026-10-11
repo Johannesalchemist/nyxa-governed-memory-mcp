@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {evaluateVerification} from '../dist/identity/unifiedTrustFabric.js';
+const now=100000;
+const profile={profileId:'phone-provider-v1',version:'1',subjectKind:'human',acceptedMethods:['customer_reference','provider_challenge'],requiredMethods:['customer_reference','provider_challenge'],verifierId:'provider:demo',maxEvidenceAgeSeconds:60};
+const evidence=['customer_reference','provider_challenge'].map((method,i)=>({method,subjectId:'human:1',verifierId:'provider:demo',verifiedAtMs:now-1000,expiresAtMs:now+1000,referenceId:'ref-'+i,outcome:'VERIFIED'}));
+test('valid externally verified profile never grants authority',()=>{const d=evaluateVerification(profile,'human:1',evidence,now);assert.equal(d.verified,true);assert.equal(d.authorityGranted,false);});
+test('missing method denied',()=>assert.equal(evaluateVerification(profile,'human:1',evidence.slice(0,1),now).verified,false));
+test('wrong subject denied',()=>assert.equal(evaluateVerification(profile,'human:2',evidence,now).verified,false));
+test('wrong verifier denied',()=>assert.equal(evaluateVerification(profile,'human:1',evidence.map(e=>({...e,verifierId:'attacker'})),now).verified,false));
+test('expired evidence denied',()=>assert.equal(evaluateVerification(profile,'human:1',evidence,now+2000).verified,false));
+test('future-dated evidence denied',()=>assert.equal(evaluateVerification(profile,'human:1',evidence,now-2000).verified,false));
+test('invalid profile denied',()=>assert.equal(evaluateVerification({...profile,requiredMethods:[]},'human:1',evidence,now).verified,false));

@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {reviewHabitatProposal} from '../dist/emergence/openEmergenceHabitat.js';
+const p={id:'proposal:1',domain:'dreaming',hypothesis:'multi-stage consolidation',evidenceIds:['obs:1'],experiment:'sandbox ablation',rollback:'discard sandbox',requestedCapabilities:[]};
+const obs=[{id:'obs:1',islandId:'island:b',domain:'dreaming',kind:'observed',claim:'measured effect',sourceIds:['trace:1'],atMs:100}];
+test('observation-backed proposal ready for sandbox only',()=>{const r=reviewHabitatProposal(p,obs);assert.equal(r.status,'READY_FOR_SANDBOX');assert.equal(r.authorityGranted,false);assert.match(r.evidenceDigest,/^[a-f0-9]{64}$/)});
+test('missing evidence parks',()=>assert.equal(reviewHabitatProposal({...p,evidenceIds:['unknown']},obs).status,'PARK'));
+test('requested capabilities cannot be auto-granted',()=>assert.equal(reviewHabitatProposal({...p,requestedCapabilities:['remote.execute']},obs).status,'PARK'));
+test('domain mismatch parks',()=>assert.equal(reviewHabitatProposal({...p,domain:'semantics'},obs).status,'PARK'));
+test('inferences without observation park',()=>assert.equal(reviewHabitatProposal(p,[{...obs[0],kind:'inferred'}]).status,'PARK'));
+test('source lineage required',()=>assert.equal(reviewHabitatProposal(p,[{...obs[0],sourceIds:[]}]).status,'PARK'));

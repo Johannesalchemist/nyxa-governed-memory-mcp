@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {NyxaResearchModes} from '../dist/epistemic/researchModes.js';
+const req={claim_id:'test',statement:'claim',evidence_packet:{claim_id:'test',statement:'claim'}};
+const provider=(name)=>({research:async()=>({supporting_evidence:[name],disconfirming_evidence:[],alternative_hypotheses:[],missing_observables:[],provenance_refs:[],contradictions:[]})});
+const deps={localJev:provider('jev'),external:provider('external'),independent:provider('independent'),jevDecide:async()=>({route:'LOCAL_JEV',reason:'cheap_local'})};
+test('JEV_AUTO delegates through Jeff decision',async()=>assert.deepEqual((await new NyxaResearchModes('JEV_AUTO',deps).research(req)).supporting_evidence,['jev']));
+test('DIRECT_RESEARCH uses shared external adapter',async()=>assert.deepEqual((await new NyxaResearchModes('DIRECT_RESEARCH',deps).research(req)).supporting_evidence,['external']));
+test('INDEPENDENT_CHECK uses diversity-gated adapter',async()=>assert.deepEqual((await new NyxaResearchModes('INDEPENDENT_CHECK',deps).research(req)).supporting_evidence,['independent']));
+test('invalid JEV decision fails closed',async()=>await assert.rejects(()=>new NyxaResearchModes('JEV_AUTO',{...deps,jevDecide:async()=>({route:'UNKNOWN',reason:'invalid'})}).research(req),/decision_invalid/));

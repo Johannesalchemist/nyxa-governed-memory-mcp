@@ -1,0 +1,44 @@
+{
+  "version": "dream-ablation-v1",
+  "checkedAt": "2026-10-11T16:24:58.254716+00:00",
+  "host": "ubuntu-4gb-nbg1-1",
+  "server_id": "nixa-01",
+  "implemented_on_disk": true,
+  "production_activated": false,
+  "master_switch": "NYXA_DREAMING_ENABLED=false prevents all writes; true still requires governance",
+  "selector": "NYXA_DREAM_MODE",
+  "modes": {
+    "off": "no derivation or candidate write",
+    "full": "audit and autobiographical inputs",
+    "audit_only": "does not read autobiographical inputs",
+    "self_model_only": "does not read audit inputs"
+  },
+  "default": "full if unset; unknown or empty values fail closed; master false always wins",
+  "mode_evidence": "selected mode recorded in candidate content and purpose",
+  "switching": "service environment configuration at process start; requires authorized configuration and targeted restart; no hot-toggle UI implemented",
+  "tests": {
+    "passed": 15,
+    "log": "/opt/nyxa-governed-memory-mcp-dev/experiments/dream-ablation-xoqh7qot/tests.log",
+    "compiled_actual_runtime_snapshot": true,
+    "proof": "real MCP per enabled mode wrote one pending candidate and recall matched; off/invalid/master-disabled wrote none; excluded source was not read; replay/E0/scope/hash integrity retained"
+  },
+  "rollback": {
+    "runtime_source_backup": "/opt/nyxa-governed-memory-mcp-dev/experiments/dream-ablation-xoqh7qot/dreamTrigger.before.ts",
+    "runtime_dist_backup": "/opt/nyxa-governed-memory-mcp-dev/experiments/dream-ablation-xoqh7qot/runtime-dist.before.js",
+    "instruction": "restore only these two files with hash preconditions; previous server patch rollback remains separate"
+  },
+  "changes": [
+    {
+      "target": "/opt/nyxa-governed-memory-mcp-runtime/src/memory/dreamTrigger.ts",
+      "before": "7e5334b5f5c46d6e51237109ae443864e12964d64af4fad303e3980e0f5ee2c7",
+      "after": "6a6a3d7a2989f71c3a83d86c931ebecec8bfa80358c41dfe632fcfe52478b305"
+    },
+    {
+      "target": "/opt/nyxa-governed-memory-mcp-runtime/dist/memory/dreamTrigger.js",
+      "before": "8f843276803b90767472a211fac72212b29f0434065cdf7e78ddaaea780635d0",
+      "after": "90074ba99451cf4156d281240d47a97297b5c9fca9c0cdf1c9b388fb4dc733f3"
+    }
+  ],
+  "learning_claim": "no measured improvement, semantic reflection, model-call ablation or Learning Ratchet integration is proved by these tests",
+  "next": "enable/select through narrowly authorized service configuration, restart, prove production effect; compare identical input snapshots and predeclared downstream metrics for learning claims"
+}

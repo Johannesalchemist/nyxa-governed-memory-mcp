@@ -33,6 +33,7 @@ import { buildPolicyMode } from "./tools/policy.mode.js";
 import { buildAuditTrace, normalizeAuditTraceLimit } from "./tools/audit.trace.js";
 import { parseProposal, ProposalValidationError, type ValidatedProposal } from "./governance/proposal.js";
 import { evaluateProposal, type GammaOutcome, type GammaDomain, type GammaDecision } from "./governance/gamma.js";
+import { verifyEvidencePassport, type EvidencePassportDecision } from "./identity/unifiedTrustFabric.js";
 import { resolveEffectRadius } from "./governance/effectResolver.js";
 import { buildKernelEffectEnvelope } from "./governance/kernelContract.js";
 import { buildKernelEffectReceipt } from "./governance/effectReceipt.js";
@@ -209,7 +210,7 @@ const SELF_MODEL_TOOLS = [
 // nyxa_dream_trigger) are proposal actions dispatched via nyxa_propose_action -- see
 // GOVERNANCE_TOOLS and executeAllowedProposal -- not separate tools, matching how self-model
 // writes work. Only recall is a direct tool, matching nyxa_self_model_read.
-const RESEARCH_TOOLS = [{ name: "nyxa_research_depth_drill", description: "Read-only bounded primary-source retrieval and E0 reassessment. Never authorizes writes or promotes evidence.", inputSchema: objectSchema({packet:{type:"object" as const},sources:{type:"array" as const,items:stringSchema(2048),minItems:1,maxItems:4}},["packet","sources"]),annotations:READ_ANNOTATIONS }];
+const RESEARCH_TOOLS = [{ name: "nyxa_research_depth_drill", description: "Read-only bounded primary-source retrieval and E0 reassessment. Never authorizes writes or promotes evidence.", inputSchema: objectSchema({packet:{type:"object" as const},sources:{type:"array" as const,items:stringSchema(2048),minItems:1,maxItems:4},mode:{type:"string" as const,enum:["JEV_AUTO","DIRECT_RESEARCH","INDEPENDENT_CHECK"]}},["packet","sources"]),annotations:READ_ANNOTATIONS }];
 
 const MEMORY_TOOLS = [
   {
@@ -663,9 +664,9 @@ export class NyxaGovernedMemoryServer {
         return await this.handleSelfModelRead(input);
       }
       if (name === "nyxa_research_depth_drill") {
-        assertKeys(input, ["packet", "sources"]);
+        assertKeys(input, ["packet", "sources", "mode"]);
         if (this.config.agentMode === "observe_only") return toolJsonResult({policy_decision:"DENY",reason:"research_requires_draft_mode"},true);
-        try { return toolJsonResult(await researchBridge(input.packet,input.sources)); }
+        try { return toolJsonResult(await researchBridge(input.packet,input.sources,(input.mode ?? "DIRECT_RESEARCH") as "JEV_AUTO"|"DIRECT_RESEARCH"|"INDEPENDENT_CHECK")); }
         catch { return toolJsonResult({error:"research_failed_or_invalid",epistemic_authority:"NONE"},true); }
       }
       if (name === "nyxa_memory_recall_candidates") {
@@ -1060,7 +1061,39 @@ export class NyxaGovernedMemoryServer {
       }
     }
 
+    // One bounded, in-process synthetic simulation job. The caller cannot supply
+    // an effect radius; the server validates target and seed bounds independently.
+    const economicSimulationRadius =
+      proposal.action === "nyxa_economic_simulation_run" &&
+      proposal.target === "simulation:/living-enterprise" &&
+      typeof proposal.payload?.seeds === "number" &&
+      Number.isSafeInteger(proposal.payload.seeds) &&
+      proposal.payload.seeds >= 1 && proposal.payload.seeds <= 300
+        ? 1 : undefined;
+    // One internal summary -> one pending project candidate. The server derives
+    // the content; callers cannot inject a summary, change scope or self-report radius.
+    // Disabled/invalid requests keep radius unknown and remain fail-closed at C5.
+    let dreamAppendRadius: number | undefined;
+    if (proposal.action === "nyxa_dream_trigger" &&
+        this.config.featureFlags.dreamingEnabled &&
+        proposal.target === "memory:/dream" &&
+        (!proposal.payload || Object.keys(proposal.payload).length === 0)) {
+      try {
+        const input = StoreCandidateInputSchema.strict().parse(
+          await deriveDreamCandidate(this.selfModel, this.auditLog)
+        );
+        if (input.scope === "project" && input.source === "dream" &&
+            input.candidate_type === "dream_summary") {
+          dreamAppendRadius = await this.candidateStore.pendingAppendRadius("memory:/candidate", input);
+        }
+      } catch {
+        // Unreadable, malformed or unbounded data never acquires trusted authority.
+        dreamAppendRadius = undefined;
+      }
+    }
     const trustedEffectRadius =
+      dreamAppendRadius ??
+      economicSimulationRadius ??
       pendingAppendRadius ??
       candidatePromotionRadius ??
       selfModelWriteRadius ??
@@ -1073,12 +1106,46 @@ export class NyxaGovernedMemoryServer {
       toolPolicy,
       trustedEffectRadius
     );
+
+    // Evidence Passport resolution is deliberately outside gamma. The proposal may carry a
+    // signed attestation, but only server-owned public trust anchors decide whether it becomes
+    // a trusted verification result. Gamma receives decisions, never raw signatures or keys.
+    const evidencePassportDecisions: EvidencePassportDecision[] = [];
+    const transitionId = `${proposal.provenance.taskId}:${proposal.provenance.runId}`;
+    for (const claim of proposal.claims) {
+      if (!claim.attestationRef) continue;
+      const matching = (proposal.evidencePassports ?? []).filter(
+        (candidate) => candidate.attestationId === claim.attestationRef
+      );
+      const attestation = matching.length === 1 ? matching[0] : undefined;
+      const anchor = attestation
+        ? this.config.evidencePassportTrustAnchors.find(
+            (candidate) => candidate.issuerId === attestation.issuerId && candidate.keyId === attestation.keyId
+          )
+        : undefined;
+      evidencePassportDecisions.push(
+        verifyEvidencePassport(
+          attestation,
+          anchor,
+          {
+            subjectId: proposal.actor,
+            action: proposal.action,
+            target: proposal.target,
+            transitionId,
+            claim
+          },
+          nowForGovernance
+        )
+      );
+    }
+
     const decision = evaluateProposal(proposal, {
       toolPolicy,
       mode: this.config.agentMode,
       now: nowForGovernance,
       ...(humanGrantCheck ? { humanGrant: humanGrantCheck } : {}),
       ...(resolvedMandate ? { mandateAuthorized: true } : {}),
+      evidencePassports: evidencePassportDecisions,
       ...(effect.status === "known" ? { effectRadius: effect.radius } : { effectRadiusUnknown: true })
     });
     const auditDecision = mapGammaOutcomeToAuditDecision(decision.outcome);
@@ -1792,6 +1859,34 @@ export class NyxaGovernedMemoryServer {
     decision: GammaDecision
   ): Promise<ToolResultPayload> {
     switch (proposal.action) {
+      case "nyxa_economic_simulation_run": {
+        if (proposal.target !== "simulation:/living-enterprise") {
+          throw new ConnectorError("simulation_target_invalid", "Canonical simulation target required.", "DENIED");
+        }
+        const seeds = proposal.payload?.seeds;
+        if (!Number.isSafeInteger(seeds) || typeof seeds !== "number" || seeds < 1 || seeds > 300) {
+          throw new ConnectorError("simulation_seed_count_invalid", "Simulation seeds must be integer 1..300.", "INVALID");
+        }
+        // In-process synthetic experiment only. No external effects, writes, or new authority.
+        const moduleUrl = new URL("../experiments/living-enterprise/paired-experiment.mjs", import.meta.url);
+        const simulation = await import(moduleUrl.href) as { runExperiment: (x: { seeds: number }) => {
+          protocol: unknown; summary: unknown; manifestHash: string; results: unknown[]
+        }};
+        const result = simulation.runExperiment({ seeds });
+        return {
+          sourceKind: "simulation", empiricalClaim: false, authorityEffect: "NONE",
+          protocol: result.protocol, summary: result.summary,
+          manifestHash: result.manifestHash, decisionRecords: result.results.length * 10,
+          evidence: {
+            claim: "Bounded synthetic simulation executed in process; no empirical business outcome verified.",
+            implementation: "NyxaGovernedMemoryServer.executeAllowedProposal",
+            status: "SUPPORTED",
+            trust: "VERIFIED_SOURCE",
+            observations: ["synthetic run completed", "scenario summary computed"],
+            gamma: "SUPPORTED"
+          }
+        };
+      }
       case "nyxa_read_file":
       case "nyxa_list":
       case "nyxa_git_status":
@@ -2161,8 +2256,17 @@ export class NyxaGovernedMemoryServer {
     };
 
     if (proposal.action === "nyxa_dream_trigger") {
-      const input = await deriveDreamCandidate(this.selfModel, this.auditLog);
-      const record = await this.candidateStore.writeCandidate(input, meta, decision);
+      if (!this.config.featureFlags.dreamingEnabled || proposal.target !== "memory:/dream" ||
+          (proposal.payload && Object.keys(proposal.payload).length !== 0)) {
+        throw new ConnectorError("dream_contract_invalid", "Only an enabled internal pending-summary cycle is supported.", "DENIED");
+      }
+      const input = StoreCandidateInputSchema.strict().parse(
+        await deriveDreamCandidate(this.selfModel, this.auditLog)
+      );
+      if (input.scope !== "project" || input.source !== "dream" || input.candidate_type !== "dream_summary") {
+        throw new ConnectorError("dream_input_invalid", "Internal summary is outside the bounded contract.", "DENIED");
+      }
+      const record = await this.candidateStore.writePendingProjectCandidate("memory:/candidate", input, meta, decision);
       return {
         written: "dream_candidate",
         id: record.id,

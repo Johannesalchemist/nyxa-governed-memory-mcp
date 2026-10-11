@@ -62,7 +62,7 @@ export function buildDiscoveryStoreProposal(original: ValidatedProposal, payload
     action: "nyxa_memory_store_candidate",
     target: "memory:/candidate",
     scope: original.scope,
-    claims: [{ tag: "FACT", statement: "E0 generated a pending research-question proposal; its underlying claim remains unverified", source: "nyxa:e0:runtime-observation" }],
+    claims: [{ tag: "CLAIM", statement: "E0 generated a pending research-question proposal; its underlying claim remains unverified", source: "nyxa:e0:runtime-observation" }],
     uncertainty: 0.1,
     requestedCapabilityClass: "I1",
     estimatedIrreversibility: "I1",

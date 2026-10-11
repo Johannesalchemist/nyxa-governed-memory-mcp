@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {verifyEvidence} from '../experiments/evolution-evidence-gate-20261009.mjs';
+const valid={kind:'MEASURED_EVIDENCE',baseline:{hash:'a',score:1},candidate:{hash:'b',score:2},scenario:{hash:'c'},holdout:{hash:'d'},independentVerifier:{id:'reviewer',signatureVerified:true},authorityDelta:0,productionPromotion:false};
+const manifest={testResults:[{status:'PASS'}]};
+test('synthetic results denied',()=>assert.equal(verifyEvidence({...valid,kind:'SYNTHETIC_CONTROL_ONLY'},manifest).outcome,'HOLD'));
+test('missing independent verification denied',()=>assert.equal(verifyEvidence({...valid,independentVerifier:{id:'reviewer',signatureVerified:false}},manifest).outcome,'HOLD'));
+test('missing holdout denied',()=>assert.equal(verifyEvidence({...valid,holdout:{}},manifest).outcome,'HOLD'));
+test('nonpositive improvement denied',()=>assert.equal(verifyEvidence({...valid,candidate:{hash:'b',score:1}},manifest).outcome,'HOLD'));
+test('authority increase denied',()=>assert.equal(verifyEvidence({...valid,authorityDelta:1},manifest).outcome,'HOLD'));
+test('failing tests denied',()=>assert.equal(verifyEvidence(valid,{testResults:[{status:'FAIL'}]}).outcome,'HOLD'));
+test('well-formed declared evidence only reaches review',()=>assert.equal(verifyEvidence(valid,manifest).outcome,'ELIGIBLE_FOR_HUMAN_REVIEW'));

@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {evaluateHabitatLifecycle} from '../dist/emergence/habitatLifecycle.js';
+const proposal={id:'p:1',domain:'memory',hypothesis:'memory adapter',evidenceIds:['e:1'],experiment:'sandbox comparison',rollback:'discard',requestedCapabilities:[]};
+const observations=[{id:'e:1',islandId:'b',domain:'memory',kind:'observed',claim:'trace',sourceIds:['trace:1'],atMs:100}];
+const dream={events:1,budget:1,modelAvailable:true,history:[]};
+const base={proposal,observations,dream};
+test('genesis lifecycle creates deterministic non-executing receipt',()=>{const a=evaluateHabitatLifecycle(base),b=evaluateHabitatLifecycle(base);assert.equal(a.outcome,'AWAIT_SANDBOX_EVIDENCE');assert.equal(a.receiptDigest,b.receiptDigest);assert.equal(a.authorityGranted,false);assert.equal(a.executed,false);assert.equal(a.integrated,false)});
+test('unverified proposal parked',()=>assert.equal(evaluateHabitatLifecycle({...base,observations:[]}).outcome,'PARK'));
+test('dream budget gate parks',()=>assert.equal(evaluateHabitatLifecycle({...base,dream:{...dream,budget:0}}).outcome,'PARK'));
+test('self-escalation parks',()=>assert.equal(evaluateHabitatLifecycle({...base,proposal:{...proposal,requestedCapabilities:['admin']}}).outcome,'PARK'));
+test('ratchet cannot retain without independent evidence',()=>{const s={resistance:1,legitimateCapability:1,recoveryCost:0,complexityCost:0,authority:0};const r=evaluateHabitatLifecycle({...base,ratchet:{failureClass:'f',baseline:s,candidate:{...s,resistance:2},originalAttackBlocked:true,variantAttackBlocked:true,regressionPassed:true,independentVerificationPassed:false}});assert.equal(r.outcome,'AWAIT_SANDBOX_EVIDENCE')});

@@ -21,7 +21,7 @@ const RUNTIME = resolve(".");
 function baseProposal(overrides = {}) {
   return {
     actor: "authority-parity-test", action: "x", target: "x", scope: "parity test",
-    claims: [{ tag: "FACT", statement: "probe", source: "authority-parity-test" }],
+    claims: [{ tag: "CLAIM", statement: "probe", source: "authority-parity-test" }],
     uncertainty: 0, requestedCapabilityClass: "I1", estimatedIrreversibility: "I1",
     provenance: { taskId: "t", runId: "r", requestingIdentity: "Jo" },
     ...overrides

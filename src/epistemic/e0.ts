@@ -165,5 +165,15 @@ export function e0Triage(input: E0ClaimInput, thresholds: E0Thresholds = DEFAULT
 export function recommendEpistemicHold(result: E0Result, thresholds: E0Thresholds = DEFAULT_E0_THRESHOLDS): boolean {
   const consequential = result.impact_score >= thresholds.impact;
   const unresolved = result.classification === "UNKNOWN" || result.classification === "UNKNOWN_UNKNOWN_SIGNAL";
+  // Availability failures are qualitatively different from ordinary bounded uncertainty:
+  // even a low-impact persistent write must not turn "unknown/unavailable" into durable
+  // evidence merely because its blast radius is small. A sourced CLAIM may be stored as a
+  // pending candidate, but missing/unavailable/unobservable/unverifiable support remains HOLD.
+  const unavailable =
+    result.reasons.includes("missing_evidence") ||
+    result.reasons.includes("unavailable_evidence") ||
+    result.reasons.includes("unobservable_current_state") ||
+    result.reasons.includes("unverifiable_claim");
+  if (unresolved && unavailable) return true;
   return consequential && unresolved && result.residual_uncertainty >= thresholds.epistemicHoldResidualUncertainty;
 }

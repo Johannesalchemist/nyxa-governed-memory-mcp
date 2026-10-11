@@ -27,7 +27,10 @@ export const SrmClaimSchema = z
     tag: z.enum(SRM_TAGS),
     statement: z.string().min(1).max(2000),
     source: z.string().min(1).max(500),
-    asOf: z.string().datetime().optional()
+    asOf: z.string().datetime().optional(),
+    // Opaque reference only. The attestation body/signature are resolved server-side
+    // from a trusted registry and are never accepted from the proposal itself.
+    attestationRef: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,255}$/).optional()
   })
   .strict();
 

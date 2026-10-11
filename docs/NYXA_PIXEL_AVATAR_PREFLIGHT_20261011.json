@@ -1,0 +1,76 @@
+{
+  "version": "pixel-avatar-switch-preflight-v1",
+  "checkedAt": "2026-10-11T16:32:04.443031+00:00",
+  "target": {
+    "hostname": "xv19616",
+    "route": "B operator-owned nyxa-ops c-preflight; server-c endpoint 100.85.17.115",
+    "live_host_verified": true,
+    "gpu": "NVIDIA RTX A4000"
+  },
+  "observations": {
+    "unreal_editor_process_found": false,
+    "port_8081_from_B": "Connection refused, errno111",
+    "sentinelC_enrolled": false,
+    "avatar_inventory": "NOT_INSPECTED",
+    "source_of_no_editor": "fixed c-preflight pgrep blender|UnrealEditor only; does not rule out packaged executable"
+  },
+  "blocker": {
+    "existing_C_worker": "c_worker.py allows actual effects only test.run and service.status; both fixed diagnostic artifact, productionEffect NONE. No Unreal/project/GPU operations bound.",
+    "missing": "operator-backed bounded C project discovery and normal-user project/launch corridor; cannot self-expand worker permits or read private SSH keys"
+  },
+  "prepared_readonly_discovery": {
+    "path": "/opt/nyxa-governed-memory-mcp-dev/experiments/pixel-avatar-preflight-20261011/preflight.py",
+    "sha256": "5d246508f4e40eedb67b2fca709cba4352ddb9836b6570c0b6ecd10ddaef8ac7",
+    "scope": "hostname/uid, selected process names and uproject args, bounded /opt/nyxa-worlds project/avatar filenames, localhost8081; no secrets/launch/mutation",
+    "executed_on_C": false
+  },
+  "acceptance": [
+    {
+      "gate": "stream",
+      "required": "fresh browser WebRTC connection, decoded moving frames and audio; HTTP is insufficient"
+    },
+    {
+      "gate": "avatars",
+      "required": "at least two actual assets load successfully, identity mapped to visible character"
+    },
+    {
+      "gate": "switch",
+      "required": "A to B to A in same stream with acknowledged avatar identity, no duplicate active body/camera or stale mic"
+    },
+    {
+      "gate": "conversation",
+      "required": "German voice utterance and response after each switch; audible voice, lip-sync and idle/head movement"
+    },
+    {
+      "gate": "Sophia",
+      "required": "hair/root binding and body/table collisions visually accepted; historical Yeti gate remains open"
+    },
+    {
+      "gate": "recovery",
+      "required": "reconnect retains consistent avatar identity and rollback restores working baseline"
+    }
+  ],
+  "ampel": [
+    {
+      "system": "C host/GPU via fixed preflight",
+      "color": "GREEN",
+      "scope": "reachable host identity and GPU name only"
+    },
+    {
+      "system": "8081 stream access from B",
+      "color": "RED",
+      "scope": "current connection refusal"
+    },
+    {
+      "system": "avatar inventory and switch",
+      "color": "GREY",
+      "scope": "no current scene/asset read or observed switch"
+    },
+    {
+      "system": "C project execution corridor",
+      "color": "YELLOW",
+      "scope": "fixed pilot diagnostics available; rendering not bound"
+    }
+  ],
+  "next": "run prepared bounded read-only inventory through operator-backed C route, select actual existing scene, preserve parallel modifications, implement allowed avatar selection on verified project and observe A-B-A with voice/lipsync"
+}

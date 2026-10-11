@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {semanticObservationsFromJev,proposeJevSemanticMaxims} from '../dist/semantic/jevExperienceAdapter.js';
+const run=(runId,overrides={})=>({runId,domain:'CCAM',arm:'JEV_ONLY',scenarioRef:'scenario-A',seed:1,hypotheses:2,novelHypotheses:1,causalDepth:1,crossDomainLinks:1,experimentDesigns:1,disconfirmingTests:1,uncertaintiesExposed:1,redTeamFindings:0,simulationCandidates:0,evidenceConfirmed:2,evidenceRejected:0,objectiveGain:1,latencyMs:10,computeCost:1,authorityDrift:0,provenanceCoverage:1,...overrides});
+test('JEV valid experiences yield inert hypotheses, never self-verified',()=>{const xs=semanticObservationsFromJev([run('a'),run('b')]);assert.equal(xs.length,2);assert.ok(xs.every(x=>!x.independent));const [m]=proposeJevSemanticMaxims([run('a'),run('b')]);assert.equal(m.status,'HYPOTHESIS');assert.equal(m.authorityEffect,'NONE')});
+test('JEV invalid provenance, authority drift, and rejected evidence are excluded',()=>{assert.deepEqual(semanticObservationsFromJev([run('a',{provenanceCoverage:.5}),run('b',{authorityDrift:1}),run('c',{evidenceRejected:1})]),[])});
+test('JEV unseen contradictory experience remains explicit',()=>{const [m]=proposeJevSemanticMaxims([run('a'),run('b',{objectiveGain:0,evidenceConfirmed:0})]);assert.equal(m.status,'HYPOTHESIS')});

@@ -8,8 +8,8 @@ import { MockResearchProvider } from '../dist/epistemic/researchAgent.js';
 const request = (i) => ({ claim_id:`elm-${i}`, statement: i%3===0?'__ESCALATES__':i%3===1?'__RESOLVES__':'__NO_GAIN__', evidence_packet:{claim_id:`elm-${i}`,statement:'synthetic',evidence_strength:0.2,provenance_quality:0.2} });
 const registry = new ResearchProviderRegistry({jevProviderId:'jev-mock',externalProviderIds:['reviewer-a','reviewer-b']})
  .register({id:'jev-mock',provider:new MockResearchProvider(),external:false,modelVersion:'mock-v1'})
- .register({id:'reviewer-a',provider:new MockResearchProvider(),external:true})
- .register({id:'reviewer-b',provider:new MockResearchProvider(),external:true});
+ .register({id:'reviewer-a',provider:new MockResearchProvider(),external:true,providerIdentity:'provider-a',modelId:'a/model'})
+ .register({id:'reviewer-b',provider:new MockResearchProvider(),external:true,providerIdentity:'provider-b',modelId:'b/model'});
 const local = new RoutedResearchProvider(registry,'LOCAL_JEV');
 const independent = new RoutedResearchProvider(registry,'INDEPENDENT_CHECK');
 

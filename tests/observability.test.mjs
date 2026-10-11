@@ -287,7 +287,7 @@ test("evidence and gamma decisions are persisted end-to-end for a real connector
   //    real gamma outcome, and its evidence (from the underlying connector read) is also persisted.
   const allowProposal = {
     actor: "obs-test", action: "nyxa_read_file", target: "readroot:/hello.txt",
-    scope: "observability regression", claims: [{ tag: "FACT", statement: "file exists", source: "test-setup" }],
+    scope: "observability regression", claims: [{ tag: "CLAIM", statement: "file exists", source: "test-setup" }],
     uncertainty: 0.1, requestedCapabilityClass: "I0", estimatedIrreversibility: "I0",
     provenance: { taskId: "obs", runId: "allow-1", requestingIdentity: "tester" }
   };

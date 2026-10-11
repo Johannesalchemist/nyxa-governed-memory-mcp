@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {contract,verifyUnderstanding} from '../experiments/semantic-understanding-handshake-20261009.mjs';
+test('authorship domain drift is blocked',()=>assert.equal(verifyUnderstanding(contract,'Authorship attribution and writer identification with cross-author testing').status,'REPAIR_REQUIRED'));
+test('generic agreement is insufficient',()=>assert.equal(verifyUnderstanding(contract,'Yes, looks good.').status,'REPAIR_REQUIRED'));
+test('domain-aligned understanding passes only preliminary check',()=>{const r=verifyUnderstanding(contract,'NYXA evolution evidence requires independent verification, holdout and artifact integrity checks before governance review');assert.equal(r.status,'SEMANTIC_PRECHECK_PASS');assert.equal(r.verifiedMeaning,false)});

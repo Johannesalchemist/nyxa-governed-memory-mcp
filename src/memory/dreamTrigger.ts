@@ -24,10 +24,16 @@ const DREAM_WINDOW = 10;
  */
 export async function deriveDreamCandidate(
   selfModel: SelfModelStore,
-  auditLog: AuditLog
+  auditLog: AuditLog,
+  mode: string = process.env.NYXA_DREAM_MODE ?? "full"
 ): Promise<StoreCandidateInput> {
-  const events = await selfModel.recentAutobiographical(DREAM_WINDOW);
-  const auditEntries = await auditLog.recent(DREAM_WINDOW);
+  // Deployment configuration selects ablation; proposal payload cannot alter it.
+  // OFF and unknown values are fail-closed even when the master flag is enabled.
+  if (!["full", "audit_only", "self_model_only"].includes(mode)) {
+    throw new Error("dream_mode_disabled_or_invalid");
+  }
+  const events = mode === "audit_only" ? [] : await selfModel.recentAutobiographical(DREAM_WINDOW);
+  const auditEntries = mode === "self_model_only" ? [] : await auditLog.recent(DREAM_WINDOW);
 
   const eventTypeCounts = new Map<string, number>();
   for (const event of events) {
@@ -54,14 +60,14 @@ export async function deriveDreamCandidate(
     `${auditEntries.length} audit entr${auditEntries.length === 1 ? "y" : "ies"}. ` +
     `Event types: ${eventSummary || "none"}. ` +
     `Governance decisions: ${decisionSummary || "none"}. ` +
-    `Window: ${earliestEvent ?? "n/a"} to ${latestEvent ?? "n/a"}.`;
+    `Window: ${earliestEvent ?? "n/a"} to ${latestEvent ?? "n/a"}. Mode: ${mode}.`;
 
   return {
     content,
     candidate_type: "dream_summary",
     source: "dream",
     scope: "project",
-    purpose: "dream-cycle compression of recent self-model and audit activity",
+    purpose: `dream-cycle compression; mode=${mode}; internal inputs only`,
     confidence: 0.5,
     importance: 0.3
   };

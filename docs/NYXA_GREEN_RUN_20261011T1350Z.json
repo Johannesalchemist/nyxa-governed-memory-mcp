@@ -1,0 +1,388 @@
+{
+  "schema_version": 1,
+  "run": "20261011T1350Z",
+  "observed_at": "2026-10-11T13:51:17Z",
+  "timezone": "Europe/Berlin",
+  "target": {
+    "hostname": "ubuntu-4gb-nbg1-1",
+    "host_id": "host_61a7c46451e300cd",
+    "route": "NYXA MCP and SentinelX",
+    "sentinel_user": "sentinelx",
+    "dev": "/opt/nyxa-governed-memory-mcp-dev",
+    "runtime": "/opt/nyxa-governed-memory-mcp-runtime",
+    "dev_head": "6a4a6a4622aee2d04ad73ed431b5e831026f5a66"
+  },
+  "observations": {
+    "tunnel": {
+      "pid": 33772,
+      "n_restarts": 0,
+      "started_at": "2026-10-11T13:03:10Z",
+      "active": true
+    },
+    "audit": {
+      "entries_checked": 3545,
+      "integrity_failure_reason": null,
+      "integrity_valid": true,
+      "latest_event_timestamp": "2026-10-11T13:51:17.521Z"
+    },
+    "mandates": [],
+    "private_acceptance_ledger": {
+      "path": "/home/jo/nyxa-green-runs",
+      "access": "PermissionError",
+      "global_green": "not_evaluable"
+    },
+    "runtime_writable_by_sentinel": false,
+    "dev_writable_by_sentinel": true
+  },
+  "snapshots": {
+    "nyxa.system.status": {
+      "agent_mode": "draft",
+      "backend": "local",
+      "backend_status": "ready",
+      "feature_flags": {
+        "apprentice_enabled": true,
+        "authoritative_writes_enabled": true,
+        "drafts_enabled": false,
+        "dreaming_enabled": false,
+        "execution_tools_enabled": true,
+        "visual_observation_enabled": false
+      },
+      "feature_flags_semantics": "Configured switches only; effective authorization additionally depends on mode, tool profile, policy, governance and connector constraints.",
+      "name": "nyxa-governed-memory-mcp",
+      "version": "0.1.1"
+    },
+    "nyxa.mandates.list": {
+      "mandates": []
+    },
+    "n8n.central.status": {
+      "capability": "n8n.central.status",
+      "content_hash": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288",
+      "evidence": {
+        "authority": false,
+        "finished_at": "2026-10-11T13:51:17.823Z",
+        "input_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "output_hash": "40cfc4661943d93e34ceea055a994d50b6fe068b5cec788b518517de3820f0b5",
+        "retrieved_at": "2026-10-11T13:51:17.823Z",
+        "source": "http://127.0.0.1:5678/healthz",
+        "source_type": "fixed_health_endpoint",
+        "started_at": "2026-10-11T13:51:17.818Z",
+        "trust": "UNVERIFIED_SOURCE"
+      },
+      "http_status": 200,
+      "node": "node:server-b",
+      "operational": true,
+      "response_bytes": 15,
+      "status": "operational",
+      "verification_scope": "health_endpoint_only_no_real_job_verification"
+    },
+    "crm.twenty.status": {
+      "capability": "crm.twenty.status",
+      "content_hash": "9890f3f9fb1ed3c2cd9466c2c937c44a89ee451b59c9dd05afe0ee5739f57b7d",
+      "evidence": {
+        "authority": false,
+        "finished_at": "2026-10-11T13:51:17.922Z",
+        "input_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "output_hash": "eb97ff91056124021bdc15d7f3e51a73aa0da4ccc59fc862ac0fa8a29ac729fa",
+        "retrieved_at": "2026-10-11T13:51:17.922Z",
+        "source": "http://ubuntu-4gb-nbg1-2.tail4e7b3d.ts.net:3010/healthz",
+        "source_type": "fixed_health_endpoint",
+        "started_at": "2026-10-11T13:51:17.904Z",
+        "trust": "UNVERIFIED_SOURCE"
+      },
+      "http_status": 200,
+      "node": "node:server-a",
+      "operational": true,
+      "response_bytes": 49,
+      "status": "operational",
+      "verification_scope": "health_endpoint_only_no_real_job_verification"
+    },
+    "android.adapter.status": {
+      "capability": "android.adapter.status",
+      "content_hash": "91786904bab071a1b6b3272689da2cd45ad3cda7041299d6514dee735c26db17",
+      "evidence": {
+        "authority": false,
+        "finished_at": "2026-10-11T13:51:17.837Z",
+        "input_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "output_hash": "96de08dafc8bfd33314574ead50f436dd2d4136863b134009e8eee17a91b9099",
+        "retrieved_at": "2026-10-11T13:51:17.837Z",
+        "source": "http://100.82.152.107:7101/health",
+        "source_type": "fixed_health_endpoint",
+        "started_at": "2026-10-11T13:51:17.831Z",
+        "trust": "UNVERIFIED_SOURCE"
+      },
+      "http_status": 200,
+      "node": "node:server-a",
+      "operational": true,
+      "response_bytes": 42,
+      "status": "operational",
+      "verification_scope": "health_endpoint_only_no_real_job_verification"
+    },
+    "unreal.pixelstream.status": {
+      "capability": "unreal.pixelstream.status",
+      "evidence": {
+        "authority": false,
+        "finished_at": "2026-10-11T13:51:17.802Z",
+        "input_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "output_hash": "3444a02d34882b2e5ecfe8f92f41aca66743d524b93caa2896c96d434f3ec3b8",
+        "retrieved_at": "2026-10-11T13:51:17.802Z",
+        "source": "http://100.85.17.115:8081/",
+        "source_type": "fixed_health_endpoint",
+        "started_at": "2026-10-11T13:51:17.779Z",
+        "trust": "UNVERIFIED_SOURCE"
+      },
+      "node": "node:server-c",
+      "operational": false,
+      "reason": "probe_failed_or_response_invalid",
+      "status": "unverified"
+    },
+    "macos.runner.status": {
+      "connector": "sascha-mac",
+      "executable": false,
+      "status": "not_configured"
+    },
+    "apple.account.status": {
+      "connector": "apple-store",
+      "executable": false,
+      "status": "not_configured"
+    },
+    "media.capabilities": {
+      "gateway": "NYXA Governed Media Gateway V1",
+      "operations": [
+        "capabilities"
+      ],
+      "providers": [
+        "openrouter"
+      ],
+      "publication": "human_approval_required"
+    }
+  },
+  "reflection": {
+    "observation": "Developed passport, mandate bridge and n8n dispatch contracts exist in a dirty development tree; live mandates are empty, Dreaming disabled in this MCP runtime, and direct-call profile excludes dream and candidate-write tools.",
+    "inference": "A daily external trigger cannot itself establish operational internal learning or production write authority.",
+    "correction": "Use the already allowed reversible single-file MCP dev patch as a real effect experiment; leave parallel identity/dispatch work unchanged.",
+    "learning": "Distinguish interface existence, profile authorization, trusted authority issuance, deployed dispatch and verified effect. Record failed observations as unknown, not host failures.",
+    "internal_dream_invoked": false,
+    "internal_learning_improvement_proven": false
+  },
+  "experiment": {
+    "action": "nyxa_apply_patch",
+    "scope": "governed-dev:/docs/NYXA_GREEN_RUN_20261011T1350Z.json",
+    "purpose": "Persist fresh observations and self-reflection through the existing authorized dev write corridor, then verify independent readback and replay suppression.",
+    "verification": "Automatic approved post-patch target, independent SentinelX readback SHA256, identical-patch replay with unchanged hash/mtime, outside-dev path rejection. Actual outcomes live in MCP audit and run report.",
+    "rollback": "New single checkpoint file only; automatic rollback on post-patch failure. No production file or foreign WIP mutation.",
+    "outcomes": {
+      "applied": true,
+      "approved_post_patch_target": "typecheck",
+      "post_patch_completed": true,
+      "independent_readback_sha256": "0b7470e0b8845245ba153e57d71620a96720e2b9e428899b393bf2d04ff62d19",
+      "replay_status": "replay",
+      "replay_unchanged_sha256_and_mtime": true,
+      "outside_dev_error": "write_not_allowed",
+      "outside_dev_target_absent": true,
+      "backup_id": "1791726781558-578f53aa-7977-4ee2-91b4-83664d57002a",
+      "service_pid_after": 33772,
+      "service_restarts_after": 0,
+      "scope_limit": "No rollback fault-injection, production deployment, trusted mandate issuance, remote effect or internal learning has been demonstrated."
+    }
+  },
+  "next_steps": [
+    "Read authoritative acceptance ledger through a permitted narrowly scoped route; do not change ACLs without operator-controlled provisioning.",
+    "Integrate and verify a trusted approval verifier and mandate issuer using the existing in-progress bridge; do not duplicate parallel work.",
+    "Wire deployed remote dispatch after grant and target verification; real Server-C effect remains unproven.",
+    "Use existing governed dream proposal path after effective profile and feature prerequisites are deliberately configured; no silent flag override."
+  ],
+  "unknown_systems": [
+    "Supabase functional query",
+    "SearXNG research result",
+    "Digitalleria/Grav/Hermes publication and TTS",
+    "HPC/Hunter technical use",
+    "App Factory complete artifact pipeline",
+    "Sophia voice/lip-sync/groom/conversation",
+    "simulation scientific effect",
+    "backup restore and recovery"
+  ],
+  "ampel": [
+    {
+      "system": "Server B / MCP reads",
+      "status": "GREEN",
+      "evidence": "Fresh successful connector reads",
+      "next": "Maintain observation",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Tunnel stability",
+      "status": "GREEN_YELLOW",
+      "evidence": "PID 33772 unchanged; NRestarts=0 since 13:03:10Z",
+      "next": "Longer soak and recovery effect",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "SentinelX B transport",
+      "status": "GREEN",
+      "evidence": "Connected operational host; independent script/readback",
+      "next": "Scoped production permissions remain separate",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Dev MCP single-file writes",
+      "status": "GREEN",
+      "evidence": "Real checkpoint write + typecheck + independent readback + replay + denied original-root write",
+      "next": "Production writes and rollback injection not included",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Audit integrity",
+      "status": "GREEN",
+      "evidence": "3545 entries valid at observation",
+      "next": "Continue bounded integrity checks",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Memory candidate operations",
+      "status": "YELLOW",
+      "evidence": "Local backend ready; candidate module exists",
+      "next": "Authorized store/recall effect; do not claim integrity from implementation",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Governance/Passport/Mandates",
+      "status": "YELLOW",
+      "evidence": "Live mandate list empty; new contracts in dev WIP",
+      "next": "Trusted issuer integration and adversarial effect test",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Reflection/Dreaming/JEV",
+      "status": "YELLOW",
+      "evidence": "Dream derivation and advisory controller inspected; MCP dreaming flag false",
+      "next": "Authorized internal proposal/candidate effect and measured learning",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "E0/Learning Ratchet",
+      "status": "GREY",
+      "evidence": "No fresh effect experiment for this scope",
+      "next": "Run existing bounded tests/ablation after WIP coordination",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "n8n central",
+      "status": "GREEN_YELLOW",
+      "evidence": "Fixed health endpoint HTTP 200",
+      "next": "Real isolated workflow effect",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "App Factory",
+      "status": "GREY",
+      "evidence": "No complete pipeline inspected",
+      "next": "Artifact generation/build/QA evidence",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Android adapter",
+      "status": "GREEN_YELLOW",
+      "evidence": "Fixed health endpoint HTTP 200",
+      "next": "Real build and artifact validation",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Twenty CRM",
+      "status": "GREEN_YELLOW",
+      "evidence": "Fixed health endpoint HTTP 200",
+      "next": "Real scoped CRM query/action",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "macOS/Xcode runner",
+      "status": "RED",
+      "evidence": "not_configured; executable false",
+      "next": "Enroll required runner; optional until acceptance requires",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Apple account adapter",
+      "status": "RED",
+      "evidence": "not_configured; executable false",
+      "next": "Configure account; optional until acceptance requires",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Media/Social gateway",
+      "status": "YELLOW",
+      "evidence": "Live provider list only OpenRouter/capabilities; dev social source exists",
+      "next": "Validate deployed OAuth/media read route",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Server A transport",
+      "status": "GREY",
+      "evidence": "Sentinel disconnected, separate CRM/Android health succeeds",
+      "next": "Independent current host verification; no offline claim",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Server C / Remote executor",
+      "status": "YELLOW",
+      "evidence": "Live remote.job.preflight registered; no dispatched effect",
+      "next": "Verified target + governed remote dispatch effect",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Pixel Streaming",
+      "status": "GREY",
+      "evidence": "Probe unverified; no valid scene observation",
+      "next": "Permitted route and stream frame evidence",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Sophia/Cafe/Voice/LipSync/Groom",
+      "status": "GREY",
+      "evidence": "No current conversation/image effect inspected",
+      "next": "Respect parked rendering gates; verify voice and visual effects",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Supabase",
+      "status": "GREY",
+      "evidence": "No functional query observed",
+      "next": "Bounded authorized health/query",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "SearXNG/Research",
+      "status": "GREY",
+      "evidence": "No fresh returned research result",
+      "next": "Existing adapter result/evidence",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "HPC/Hunter",
+      "status": "GREY",
+      "evidence": "No technical job observed",
+      "next": "Verify current access and bounded computation",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Digitalleria/Grav/Hermes",
+      "status": "GREY",
+      "evidence": "No user-facing functional check",
+      "next": "Read/render/TTS verification within existing authority",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Simulations",
+      "status": "GREY",
+      "evidence": "Existing experiment WIP listed; not executed by this run",
+      "next": "Coordinate then measure existing experiment",
+      "observed_at": "2026-10-11T13:51:17Z"
+    },
+    {
+      "system": "Backup/Restore/Recovery",
+      "status": "GREY",
+      "evidence": "Private acceptance ledger unreadable to sentinelx",
+      "next": "Permitted ledger read plus recovery evidence",
+      "observed_at": "2026-10-11T13:51:17Z"
+    }
+  ]
+}

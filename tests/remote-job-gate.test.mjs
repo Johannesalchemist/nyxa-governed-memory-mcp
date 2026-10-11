@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { assessRemoteJob } from '../dist/organism/remoteJobGate.js';
+const req={version:'nyxa.remote-job.v1',target:'server-c',kind:'simulation.status',jobId:'job-1',actorId:'actor-1',mandateId:'mandate-1',evidenceId:'evidence-1',maxRuntimeSeconds:30};
+const auth={decision:'ALLOW',mandateId:'mandate-1',actorId:'actor-1',target:'server-c',kind:'simulation.status',evidenceId:'evidence-1',expiresAtMs:2000};
+test('rejects absent authority',()=>assert.equal(assessRemoteJob(req,null,1000,()=>false).allowed,false));
+test('rejects stale authority',()=>assert.equal(assessRemoteJob(req,{...auth,expiresAtMs:999},1000,()=>false).reason,'authorization_expired'));
+test('rejects mismatched authority',()=>assert.equal(assessRemoteJob(req,{...auth,actorId:'other'},1000,()=>false).reason,'authorization_mismatch'));
+test('rejects replay',()=>assert.equal(assessRemoteJob(req,auth,1000,()=>true).reason,'replay_detected'));
+test('rejects unknown fields',()=>assert.equal(assessRemoteJob({...req,command:'rm'},auth,1000,()=>false).reason,'invalid_envelope'));
+test('allows only eligible planning',()=>assert.equal(assessRemoteJob(req,auth,1000,()=>false).allowed,true));

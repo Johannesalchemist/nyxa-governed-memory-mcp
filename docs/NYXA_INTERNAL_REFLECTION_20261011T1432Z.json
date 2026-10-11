@@ -1,0 +1,61 @@
+{
+  "version": "1.0.0",
+  "checkedAt": "2026-10-11T14:33:28.799818+00:00",
+  "task": "internal reflection wiring",
+  "host": "ubuntu-4gb-nbg1-1",
+  "server_id": "nixa-01",
+  "head": "6a4a6a4622aee2d04ad73ed431b5e831026f5a66",
+  "observation": {
+    "dev_contract_implemented": true,
+    "runtime_patch_preserves_runtime_specific_changes": true,
+    "productionActivated": false,
+    "proof_candidate_id": "24058105-cb44-4c1d-ab98-5fb1b59df292",
+    "proof_content": "Dream cycle summary over last 1 autobiographical event(s) and 2 audit entries. Event types: session_start=1. Governance decisions: DENY=1, ALLOWED=1. Window: 2026-10-11T14:32:30.830Z to 2026-10-11T14:32:30.830Z.",
+    "development_tests": {
+      "passed": 25
+    },
+    "runtime_tests": {
+      "passed": 24
+    },
+    "data_after_process_exit_verified": true
+  },
+  "inference": "Existing dream derivation is a real bounded internal compression path once enabled. No semantic synthesis, automatic promotion or measured learning improvement is proven.",
+  "discarded_assumptions": [
+    "The first failed legacy test run was not product failure: connector fixture was missing in staging.",
+    "Runtime cannot be replaced by full dev build: different live integrations must be preserved.",
+    "An allowed audit entry is not necessarily the effect-resolution entry: select the event with actual effect evidence."
+  ],
+  "limitations": [
+    "Actual production dreaming flag still disabled; no production mutation or restart performed.",
+    "No proof of autonomous learning, JEV gain, or ratchet change.",
+    "No internal periodic scheduler added; existing approved trigger must invoke canonical proposal after production activation."
+  ],
+  "next_step": "Use operator-backed exact activation permission to apply pinned two-file runtime patch and enable NYXA_DREAMING_ENABLED, then targeted restart and independent live proof. Never edit Sentinel allowlist or authority credentials.",
+  "manifest": "/opt/nyxa-governed-memory-mcp-dev/experiments/runtime-reflection-m9nxyq_9/deployment-manifest.json",
+  "dev_before_backup": "/opt/nyxa-governed-memory-mcp-dev/experiments/runtime-reflection-m9nxyq_9/server.dev.before.ts",
+  "runtime_before_backup": "/opt/nyxa-governed-memory-mcp-dev/experiments/runtime-reflection-m9nxyq_9/server.runtime.before.ts",
+  "coordination": "Existing modified and untracked work preserved. No commits, broad sync, grant issuance or other system mutations.",
+  "ampel": [
+    {
+      "component": "bounded internal dreaming contract, isolated runtime",
+      "color": "GREEN",
+      "scope": "one server-derived pending project candidate through C0/gamma/E0/replay/hash-chain gates"
+    },
+    {
+      "component": "production dreaming",
+      "color": "YELLOW",
+      "scope": "patch prepared and tested; activation/restart permission missing"
+    },
+    {
+      "component": "autonomous learning/JEV/ratchet",
+      "color": "GRAY",
+      "scope": "no measured gain or live integration proof"
+    }
+  ],
+  "project_memory_checkpoint": {
+    "id": "03bd423c-5b75-427d-a4d7-88969aefa6c9",
+    "status": "pending",
+    "live_store_result": "ALLOW",
+    "production_dreaming_enabled": false
+  }
+}

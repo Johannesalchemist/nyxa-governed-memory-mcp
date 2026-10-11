@@ -100,7 +100,7 @@ function promoteProposal(candidateId, claims, uncertainty, humanGrant, provenanc
 
 // Memory mutations currently stop at C5 before E0: no trusted dependency radius.
 for (const [label, claims, payloadOverrides] of [
-  ["strong evidence", [strongClaim(), strongClaim("second-source")], {}],
+  ["sourced claims", [{ tag: "CLAIM", statement: "bounded claim", source: "step11b-test" }, { tag: "CLAIM", statement: "bounded claim", source: "second-source" }], {}],
   ["weak evidence", [weakClaim()], {}],
   ["caller radius/confidence spoof", [weakClaim()], { effectRadius: 0, evidence_strength: 1 }]
 ]) {

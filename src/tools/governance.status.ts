@@ -24,11 +24,20 @@ export function buildGovernanceStatus(config: NyxaConfig) {
         { domain: "C1", name: "Constraints", description: "known/allowed tool, and target is not the governance/connector control plane" },
         { domain: "C2", name: "Authority", description: "caller mode meets the tool's minimum; human-approval requirement escalates" },
         { domain: "C3", name: "Irreversibility", description: "ground truth is the tool's real capabilityClass, never the proposer's estimate; I2/I3 require an exact durable server-resolved mandate and remain non-executable without it" },
-        { domain: "C4", name: "Provenance validity", description: "every claim needs a non-blank source; EXTERNAL_EVIDENCE claims expire after 24h" },
+        { domain: "C4", name: "Provenance validity", description: "source strings are attribution only; FACT/EXTERNAL_EVIDENCE require a valid Evidence Passport bound to issuer, claim, actor, action, target and transition; EXTERNAL_EVIDENCE also expires after 24h" },
         { domain: "C5", name: "Escalation reachability", description: "any future high-execution-risk tool always routes to a human" },
         { domain: "E0", name: "Epistemic sufficiency", description: "implemented in src/epistemic/e0.ts + integration.ts; every gamma ALLOW that requires epistemic assessment is checked before budget/replay reservation and before any real effect; insufficiency holds fail closed" }
       ],
       possible_outcomes: ["ALLOW", "DENY", "ESCALATE", "DEGRADE", "UNKNOWN"]
+    },
+    evidence_passport: {
+      implemented: true,
+      version: "nyxa.evidence-passport.v1",
+      signature_algorithm: "Ed25519",
+      trust_anchor_count: config.evidencePassportTrustAnchors?.length ?? 0,
+      configured: (config.evidencePassportTrustAnchors?.length ?? 0) > 0,
+      private_signing_keys_in_governance_process: false,
+      authority_semantics: "verified evidence never grants commit authority"
     },
     advisory_fields: {
       alpha: "proposal.rationale -- free-text argument FOR the action, recorded for audit only, never read by gamma",

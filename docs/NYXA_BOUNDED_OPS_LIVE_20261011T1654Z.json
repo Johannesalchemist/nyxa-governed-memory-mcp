@@ -1,0 +1,53 @@
+{
+  "version": "nyxa-bounded-ops-live-v1",
+  "checkedAt": "2026-10-11T16:55:00Z",
+  "B": {
+    "host": "ubuntu-4gb-nbg1-1",
+    "user": "sentinelx",
+    "uid": 993
+  },
+  "C": {
+    "host": "xv19616",
+    "uid": 0,
+    "route": "operator-installed root-owned helper -> runuser jo -> existing nyxa-c run -> fixed pinned readonly collector"
+  },
+  "result": {
+    "ok": true,
+    "interpreter": "python3",
+    "sudo": false,
+    "cwd": null,
+    "cleanup": true,
+    "command": [
+      "python3",
+      "/var/lib/sentinelx/uploads/.sentinelx_uploads/script_job_ddac2f5facda4871aef6db92cecb00c7/script.py"
+    ],
+    "output": "{\"host\": \"ubuntu-4gb-nbg1-1\", \"uid\": 993}\n{\"path\": \"/usr/local/sbin/nyxa-bounded-ops\", \"uid\": 0, \"mode\": \"0o755\"}\n{\"path\": \"/usr/local/lib/nyxa-bounded-ops/unreal_inventory.py\", \"uid\": 0, \"mode\": \"0o644\"}\nEXIT 0\n{\"version\": \"nyxa.unreal-inventory.v1\", \"host\": \"xv19616\", \"uid\": 0, \"observedAt\": \"2026-10-11T16:54:04.275164+00:00\", \"productionMutation\": \"NONE\", \"inventory\": {\"root\": \"/opt/nyxa-worlds\", \"exists\": true, \"complete\": true, \"projects\": [\"/opt/nyxa-worlds/JevDemo/JevDemo.uproject\", \"/opt/nyxa-worlds/Smoke/Smoke.uproject\"], \"possibleAvatarAssets\": [], \"inspectedEntries\": 36, \"errors\": []}, \"assetSemantics\": \"Names only; no loadability, stream or avatar-switch proof.\"}",
+    "duration": 0.68,
+    "returncode": 0
+  },
+  "rights": {
+    "collectorOwner": 0,
+    "helperOwner": 0,
+    "arbitraryOperation": "sudo denied exit 1",
+    "restart": "installed; not exercised, no present need"
+  },
+  "runtime": {
+    "MainPID": 33772,
+    "NRestarts": 0,
+    "active": true,
+    "dreamingEnabled": false
+  },
+  "interpretation": "Only /opt/nyxa-worlds inventoried: JevDemo and Smoke, no matching avatar filenames. Does not exclude Cafe/Sophia elsewhere; filename search is not avatar loadability proof.",
+  "reflection": {
+    "discardedAssumption": "Root /opt/nyxa-worlds covers actual Cafe/Sophia project",
+    "finding": "Granted OS route produces verifiable C filesystem observation; productive MCP action remains unbound",
+    "next": "Coordinate existing remoteJobDispatch work; locate authoritative Cafe/Sophia path via separately reviewed fixed inventory scope; retain current protections."
+  },
+  "open": [
+    "productive MCP executor binding",
+    "authoritative Cafe/Sophia project location",
+    "normal-user managed scene execution",
+    "WebRTC frames/audio",
+    "A-B-A avatar switch"
+  ]
+}

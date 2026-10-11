@@ -9,10 +9,20 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { generateKeyPairSync, sign } from "node:crypto";
+import { canonicalEvidencePassportPayload, evidenceClaimDigest } from "../dist/identity/unifiedTrustFabric.js";
 import { createIsolatedE2EHome, cleanupAll } from "./helpers/isolated-e2e-env.mjs";
 
 const RUNTIME = resolve(".");
 const TOKEN = "step11-test-token-do-not-use-in-production";
+const EVIDENCE_KEYS = generateKeyPairSync("ed25519");
+const EVIDENCE_ANCHOR = {
+  issuerId: "step11-test-attestor",
+  keyId: "ed25519:step11-test",
+  publicKeyPem: EVIDENCE_KEYS.publicKey.export({ type: "spki", format: "pem" }),
+  allowedClasses: ["human_observation", "external_evidence"],
+  maxAgeSeconds: 300
+};
 const isolatedHomes = [];
 after(() => cleanupAll(isolatedHomes));
 
@@ -24,7 +34,8 @@ async function spawnServer({ mode = "draft", token = TOKEN } = {}) {
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     HOME: home.homeDir,
     LANG: "C.UTF-8",
-    NYXA_DATA_DIR: dataDir
+    NYXA_DATA_DIR: dataDir,
+    NYXA_EVIDENCE_PASSPORT_TRUST_ANCHORS_JSON: JSON.stringify([EVIDENCE_ANCHOR])
   };
   if (mode) env.NYXA_AGENT_MODE = mode;
   if (token) env.NYXA_HUMAN_AUTHORITY_TOKEN = token;
@@ -37,7 +48,7 @@ async function spawnServer({ mode = "draft", token = TOKEN } = {}) {
 function parse(result) { return JSON.parse(result.content[0].text); }
 
 function baseProposal(overrides = {}) {
-  return {
+  const merged = {
     actor: "step11-test",
     action: "nyxa_memory_promote_candidate",
     target: "memory-candidate:/PLACEHOLDER",
@@ -49,6 +60,44 @@ function baseProposal(overrides = {}) {
     provenance: { taskId: "step11", runId: "run-1", requestingIdentity: "Jo" },
     ...overrides
   };
+
+  const transitionId = `${merged.provenance.taskId}:${merged.provenance.runId}`;
+  const issuedAtMs = Date.now() - 100;
+  const expiresAtMs = issuedAtMs + 60_000;
+  const claims = merged.claims.map((rawClaim, index) => {
+    const claim = {
+      ...rawClaim,
+      attestationRef: `att:step11:${merged.provenance.taskId}:${merged.provenance.runId}:${index}`
+    };
+    return claim;
+  });
+  const evidencePassports = claims.map((claim, index) => {
+    const unsigned = {
+      version: "nyxa.evidence-passport.v1",
+      attestationId: claim.attestationRef,
+      issuerId: EVIDENCE_ANCHOR.issuerId,
+      keyId: EVIDENCE_ANCHOR.keyId,
+      attestationClass: claim.tag === "EXTERNAL_EVIDENCE" ? "external_evidence" : "human_observation",
+      subjectId: merged.actor,
+      action: merged.action,
+      target: merged.target,
+      transitionId,
+      claimDigest: evidenceClaimDigest(claim),
+      issuedAtMs,
+      expiresAtMs,
+      nonce: `nonce:step11:${merged.provenance.taskId}:${merged.provenance.runId}:${index}`
+    };
+    return {
+      ...unsigned,
+      signature: sign(
+        null,
+        Buffer.from(canonicalEvidencePassportPayload(unsigned), "utf8"),
+        EVIDENCE_KEYS.privateKey
+      ).toString("base64url")
+    };
+  });
+
+  return { ...merged, claims, evidencePassports };
 }
 
 async function storeCandidate(client, overrides = {}) {
@@ -57,7 +106,7 @@ async function storeCandidate(client, overrides = {}) {
     action: "nyxa_memory_store_candidate",
     target: "memory:/candidate",
     scope: "step11 fixture setup",
-    claims: [{ tag: "FACT", statement: "fixture", source: "step11-test" }],
+    claims: [{ tag: "CLAIM", statement: "fixture", source: "step11-test" }],
     uncertainty: 0,
     requestedCapabilityClass: "I1",
     estimatedIrreversibility: "I1",

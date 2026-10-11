@@ -297,7 +297,17 @@ export class SecureConnector {
     await this.verifyTargetIntegrity(target);
     const result = await this.runInSandbox(target);
     const passed = result.exitCode === 0 && !result.timedOut;
-    if (!passed) throw new ConnectorError(result.timedOut ? "test_timeout" : "test_failed", "Approved test target failed.", "INVALID");
+    if (!passed) {
+      // Safe bounded metadata only: never expose stdout/stderr in public errors.
+      const diagnostic = [
+        "Approved test target failed.",
+        `exit_code=${result.exitCode}`,
+        `timed_out=${result.timedOut}`,
+        `output_truncated=${result.truncated}`,
+        `redaction_count=${result.redactions}`
+      ].join(" ");
+      throw new ConnectorError(result.timedOut ? "test_timeout" : "test_failed", diagnostic, "INVALID");
+    }
     return supportedResult("I1", target.id, "sandboxed test target adapter", "Run an approved deterministic test target inside the execution boundary", target.trust, {
       exit_code: result.exitCode,
       stdout: result.stdout,

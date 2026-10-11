@@ -1,0 +1,37 @@
+{
+  "checkedAt": "2026-10-11T16:20:35.323796+00:00",
+  "host": "ubuntu-4gb-nbg1-1",
+  "server_id": "nixa-01",
+  "uid": 993,
+  "changes": [
+    {
+      "target": "/opt/nyxa-governed-memory-mcp-runtime/src/server.ts",
+      "before": "fa99ccbbe1833c031b0279bb0e67752639fe9702e7a976aa187e429ecda3cdcf",
+      "artifact": "/opt/nyxa-governed-memory-mcp-dev/experiments/runtime-reflection-m9nxyq_9/src/server.ts",
+      "after": "9ba8de830525ef208ad7d5e4ca4e1989f6dae2f20dc0d26ee02a1d1c9e257399"
+    },
+    {
+      "target": "/opt/nyxa-governed-memory-mcp-runtime/dist/server.js",
+      "before": "d4c978c08ca03133721a213eddac8ba4fecc9c3e189e41e74e0037bcfe96c396",
+      "artifact": "/opt/nyxa-governed-memory-mcp-dev/experiments/runtime-reflection-m9nxyq_9/dist/server.js",
+      "after": "0d6c72ca96bb4859d672207e27992f143a63b98f3c3912f682ba3886aa935140"
+    }
+  ],
+  "backup": "/opt/nyxa-governed-memory-mcp-dev/experiments/runtime-reflection-m9nxyq_9/deployment-backup-20261011T162035Z",
+  "dependency_drift": false,
+  "readback_verified": true,
+  "service_restarted": false,
+  "production_dreaming_activated": false,
+  "remaining": "OS-backed service environment configuration and targeted restart permission",
+  "independent_verification": {
+    "checkedAt": "2026-10-11T16:20:57.485998+00:00",
+    "syntax_exit": 0,
+    "service": "MainPID=33772\nNRestarts=0\nActiveState=active\n",
+    "activation_scope": "installed on disk only; existing process unchanged"
+  },
+  "technical_permission_required": {
+    "configuration": "root-owned dedicated systemd drop-in for nyxa-tunnel-client.service: [Service] Environment=NYXA_DREAMING_ENABLED=true; validate effective child environment",
+    "execution": "operator-backed fixed daemon-reload and restart of nyxa-tunnel-client.service; same fixed path for rollback",
+    "constraints": "No arbitrary root commands or Sentinel allowlist edits"
+  }
+}

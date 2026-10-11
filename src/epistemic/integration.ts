@@ -97,10 +97,12 @@ export function deriveImpactFromToolPolicy(toolPolicy: EpistemicToolPolicyView |
  * the tool's own ground-truth policy. The one legitimate use of caller self-report is
  * claimed_confidence (from proposal.uncertainty) -- compared AGAINST the independently derived
  * evidence_strength (E0's signal B), never substituted for it. Known, honest limitation (same
- * one gamma's own C4 check already accepts): this checks claim STRUCTURE, not claim TRUTH -- a
- * caller can still tag a false statement "FACT" with a real-looking source. It cannot, however,
- * force a high evidence_strength merely by asserting one, which is the actual property Phase
- * 11B.6 requires (see tests/e0-integration.test.mjs case H).
+ * live governance pipeline now places an Evidence-Passport boundary in gamma/C4 before E0:
+ * FACT and EXTERNAL_EVIDENCE are accepted there only when a server-verified signed attestation
+ * binds the exact issuer/claim/actor/action/target/transition. E0 deliberately does not verify
+ * signatures itself; it evaluates epistemic sufficiency of the claims that survived governance.
+ * Direct unit calls can still construct arbitrary SrmClaim values, but those calls have no
+ * execution authority and are test inputs only.
  */
 export function deriveE0ClaimInput(
   claims: readonly SrmClaim[],

@@ -12,7 +12,7 @@ function baseProposal(overrides = {}) {
     action: "nyxa_read_file",
     target: "root:/README.md",
     scope: "read one file for verification",
-    claims: [{ tag: "FACT", statement: "file exists", source: "filesystem-listing" }],
+    claims: [{ tag: "CLAIM", statement: "file exists", source: "filesystem-listing" }],
     uncertainty: 0.1,
     requestedCapabilityClass: "I0",
     estimatedIrreversibility: "I0",

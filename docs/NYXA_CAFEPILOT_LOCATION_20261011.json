@@ -1,0 +1,30 @@
+{
+  "version": "nyxa-cafe-location-v1",
+  "recordedAt": "2026-10-11T17:13:30Z",
+  "host": "xv19616",
+  "route": "100.85.17.115",
+  "historical": {
+    "project": "/home/jo/nyxa-film-factory/unreal/CafePilot/CafePilot.uproject",
+    "map": "/Game/CafePilot",
+    "engine": "/opt/unreal/5.8.3",
+    "signalling": "/home/jo/nyxa-film-factory/runtime/pixelstreaming2/SignallingWebServer",
+    "playerPort": 8080,
+    "streamerPort": 8888,
+    "probePort": 8081,
+    "source": "Personal Context retrieved user terminal message 2026-10-01T08:31:55Z; assistant cross-reference 2026-10-03T14:09:25Z; probe-port user message 2026-10-04T06:18:36Z",
+    "confidence": "historical evidence, not current filesystem verification"
+  },
+  "live": {
+    "checkedAt": "2026-10-11T17:13:30Z",
+    "http8080": "connection refused errno111",
+    "http8081": "connection refused errno111",
+    "projectExists": "not checked; installed fixed collector only permits /opt/nyxa-worlds"
+  },
+  "corrections": [
+    "/opt/nyxa-worlds is demo scope, not known CafePilot location",
+    "8081 cannot represent sole Cafe player health; player historical8080",
+    "BlackFrameCanary is distinct historical harbor project; do not substitute for CafePilot"
+  ],
+  "next": "Add operator-reviewed fixed read-only check of known CafePilot project, bounded Content asset names and SignallingWebServer existence; no generic remote shell, no secret reads, no scene start until live path/version verified.",
+  "persistentRule": "Before rediscovery, read this checkpoint or search memory tag CafePilot-location. Revalidate exact known path first; use broader inventory only if absent or provenance conflicts. Record source/time/scope; historical knowledge does not expire into nonexistence nor become current live proof."
+}

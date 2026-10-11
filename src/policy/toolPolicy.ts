@@ -9,6 +9,9 @@ export type ToolPolicy = {
   executionRisk: "none" | "low" | "medium" | "high";
   allowedInV01: boolean;
   capabilityClass: CapabilityClass;
+  /** Server-side policy bit: claims tagged FACT/EXTERNAL_EVIDENCE must carry a
+   * verified Evidence Passport before this effect may rely on them. */
+  requiresTrustedEvidence?: boolean;
 };
 
 export const TOOL_POLICIES: Record<string, ToolPolicy> = {
@@ -51,10 +54,21 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   nyxa_git_diff: readPolicy("nyxa_git_diff"),
   nyxa_logs: readPolicy("nyxa_logs"),
   nyxa_run_test: devPolicy("nyxa_run_test", "low"),
-  nyxa_apply_patch: devPolicy("nyxa_apply_patch", "medium"),
+  nyxa_apply_patch: devPolicy("nyxa_apply_patch", "medium", false),
   // Proposing is always safe (I0) — only the underlying action, once ALLOWed by gamma, carries
   // real risk, and that action is checked against its OWN ToolPolicy, not this one.
   nyxa_propose_action: readPolicy("nyxa_propose_action"),
+  // Simulation is an I1 effect. Only nyxa_propose_action may dispatch it after Gamma,
+  // epistemic checks, kernel and ExecutionGate; toolbox.execute remains read-only.
+  nyxa_economic_simulation_run: {
+    toolName: "nyxa_economic_simulation_run",
+    minimumMode: "draft",
+    writesAuthoritativeMemory: false,
+    requiresHumanApproval: false,
+    executionRisk: "low",
+    allowedInV01: true,
+    capabilityClass: "I1"
+  },
 
   // Newsroom: bounded external model consultation.
   // External responses are evidence only and never authority.
@@ -77,19 +91,21 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   // I2: identity is never directly dispatchable. It can execute only through the governed
   // proposal path when gamma resolves an exact durable mandate and the ExecutionGate admits
   // the bounded effect. Without that authority it escalates and produces no effect.
-  nyxa_self_model_write_identity: selfModelWritePolicy("nyxa_self_model_write_identity", "I2"),
-  nyxa_self_model_write_personality: selfModelWritePolicy("nyxa_self_model_write_personality", "I1"),
-  nyxa_self_model_write_self_model: selfModelWritePolicy("nyxa_self_model_write_self_model", "I1"),
-  nyxa_self_model_write_current_state: selfModelWritePolicy("nyxa_self_model_write_current_state", "I1"),
-  nyxa_self_model_write_belief: selfModelWritePolicy("nyxa_self_model_write_belief", "I1"),
+  nyxa_self_model_write_identity: selfModelWritePolicy("nyxa_self_model_write_identity", "I2", false),
+  nyxa_self_model_write_personality: selfModelWritePolicy("nyxa_self_model_write_personality", "I1", false),
+  nyxa_self_model_write_self_model: selfModelWritePolicy("nyxa_self_model_write_self_model", "I1", true),
+  nyxa_self_model_write_current_state: selfModelWritePolicy("nyxa_self_model_write_current_state", "I1", true),
+  nyxa_self_model_write_belief: selfModelWritePolicy("nyxa_self_model_write_belief", "I1", true),
   nyxa_self_model_write_capability_limitation: selfModelWritePolicy(
     "nyxa_self_model_write_capability_limitation",
-    "I1"
+    "I1",
+    true
   ),
-  nyxa_self_model_write_goal: selfModelWritePolicy("nyxa_self_model_write_goal", "I1"),
+  nyxa_self_model_write_goal: selfModelWritePolicy("nyxa_self_model_write_goal", "I1", false),
   nyxa_self_model_write_autobiographical_event: selfModelWritePolicy(
     "nyxa_self_model_write_autobiographical_event",
-    "I1"
+    "I1",
+    true
   ),
 
   // Phase 1 observability extension: read-only filtered views over data this MCP already
@@ -111,15 +127,15 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   // nyxa_propose_action -> gamma. nyxa_dream_trigger is the same shape again -- it derives its
   // candidate deterministically from existing data (memory/dreamTrigger.ts) but still writes
   // through this identical governed path, never bypassing it.
-  nyxa_memory_store_candidate: selfModelWritePolicy("nyxa_memory_store_candidate", "I1"),
-  nyxa_dream_trigger: selfModelWritePolicy("nyxa_dream_trigger", "I1"),
+  nyxa_memory_store_candidate: nonAuthoritativeWritePolicy("nyxa_memory_store_candidate"),
+  nyxa_dream_trigger: nonAuthoritativeWritePolicy("nyxa_dream_trigger"),
   // Recall is read-only and side-effect-free, same treatment as nyxa_self_model_read.
   nyxa_memory_recall_candidates: readPolicy("nyxa_memory_recall_candidates"),
 
   // Company Audit v1: observations are non-authoritative interview/evidence records.
   // Writes are I1 and may execute only through nyxa_propose_action -> gamma/E0.
   // Reads are side-effect-free I0.
-  nyxa_company_audit_record: selfModelWritePolicy("nyxa_company_audit_record", "I1"),
+  nyxa_company_audit_record: nonAuthoritativeWritePolicy("nyxa_company_audit_record"),
   nyxa_company_audit_read: readPolicy("nyxa_company_audit_read"),
 
   // Step 11: the first real (non-E2E-fixture) production-shaped human-authority capability.
@@ -142,7 +158,8 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
     requiresHumanApproval: true,
     executionRisk: "medium",
     allowedInV01: true,
-    capabilityClass: "I1"
+    capabilityClass: "I1",
+    requiresTrustedEvidence: false
   },
 
   // Governance E2E regression fixtures (tests/governance-e2e.test.mjs). Both tools write only
@@ -170,7 +187,21 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   nyxa_human_grant_issue: {toolName: "nyxa_human_grant_issue", minimumMode: "draft", writesAuthoritativeMemory: false, requiresHumanApproval: false, executionRisk: "low", allowedInV01: true, capabilityClass: "I0"}
 };
 
-function selfModelWritePolicy(toolName: string, capabilityClass: CapabilityClass): ToolPolicy {
+
+function nonAuthoritativeWritePolicy(toolName: string): ToolPolicy {
+  return {
+    toolName,
+    minimumMode: "draft",
+    writesAuthoritativeMemory: false,
+    requiresHumanApproval: false,
+    executionRisk: "low",
+    allowedInV01: true,
+    capabilityClass: "I1",
+    requiresTrustedEvidence: false
+  };
+}
+
+function selfModelWritePolicy(toolName: string, capabilityClass: CapabilityClass, requiresTrustedEvidence = false): ToolPolicy {
   return {
     toolName,
     minimumMode: "draft",
@@ -178,7 +209,8 @@ function selfModelWritePolicy(toolName: string, capabilityClass: CapabilityClass
     requiresHumanApproval: false,
     executionRisk: "low",
     allowedInV01: true,
-    capabilityClass
+    capabilityClass,
+    requiresTrustedEvidence
   };
 }
 
@@ -194,7 +226,7 @@ function readPolicy(toolName: string): ToolPolicy {
   };
 }
 
-function devPolicy(toolName: string, executionRisk: "low" | "medium"): ToolPolicy {
+function devPolicy(toolName: string, executionRisk: "low" | "medium", requiresTrustedEvidence = false): ToolPolicy {
   return {
     toolName,
     minimumMode: "draft",
@@ -202,6 +234,7 @@ function devPolicy(toolName: string, executionRisk: "low" | "medium"): ToolPolic
     requiresHumanApproval: false,
     executionRisk,
     allowedInV01: true,
-    capabilityClass: "I1"
+    capabilityClass: "I1",
+    requiresTrustedEvidence
   };
 }

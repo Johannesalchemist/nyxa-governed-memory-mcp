@@ -23,7 +23,7 @@ async function spawn() {
 }
 function proposal(runId, target) {
   return { actor: "mail-agent", action: "nyxa_e2e_write_scratch", target, scope: "crm/campaign-42",
-    claims: [{ tag: "FACT", statement: "mandate probe", source: "mandate-e2e" }], uncertainty: 0,
+    claims: [{ tag: "CLAIM", statement: "mandate probe", source: "mandate-e2e" }], uncertainty: 0,
     requestedCapabilityClass: "I1", estimatedIrreversibility: "I1",
     provenance: { taskId: "mandate-e2e", runId, requestingIdentity: "Jo" } };
 }
@@ -58,7 +58,7 @@ test("mandate allows bounded effect, revocation immediately stops later effects"
 
 function i2Proposal(runId) {
   return { actor: "identity-admin", action: "nyxa_self_model_write_identity", target: "self-model:/identity", scope: "self-model/identity",
-    claims: [{ tag: "FACT", statement: "operator delegated identity update", source: "mandate-e2e" }], uncertainty: 0,
+    claims: [{ tag: "CLAIM", statement: "operator delegated identity update", source: "mandate-e2e" }], uncertainty: 0,
     requestedCapabilityClass: "I2", estimatedIrreversibility: "I2",
     provenance: { taskId: "mandate-i2", runId, requestingIdentity: "Jo" }, payload: { name: "NYXA Mandate Probe", version: "test", purpose: "prove governed I2 reachability", deployment: "isolated-e2e" } };
 }

@@ -2,6 +2,24 @@ import { z } from "zod";
 import { SrmClaimSchema } from "../srm/types.js";
 
 const capabilityClassEnum = z.enum(["I0", "I1", "I2", "I3"]);
+const evidenceAttestationClassEnum = z.enum(["execution_result", "connector_observation", "external_evidence", "human_observation"]);
+const evidencePassportAttestationSchema = z.object({
+  version: z.literal("nyxa.evidence-passport.v1"),
+  attestationId: z.string().min(1).max(256),
+  issuerId: z.string().min(1).max(200),
+  keyId: z.string().min(1).max(200),
+  attestationClass: evidenceAttestationClassEnum,
+  subjectId: z.string().min(1).max(200),
+  action: z.string().min(1).max(128),
+  target: z.string().min(1).max(1000),
+  transitionId: z.string().min(1).max(401),
+  claimDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  resultDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  issuedAtMs: z.number().int().nonnegative(),
+  expiresAtMs: z.number().int().positive(),
+  nonce: z.string().min(1).max(256),
+  signature: z.string().min(1).max(2048)
+}).strict();
 
 /**
  * Structured Proposal / Intent envelope. This is the model/agent-facing front door to governed
@@ -22,6 +40,9 @@ export const ProposalSchema = z
     target: z.string().min(1).max(1000),
     scope: z.string().min(1).max(2000),
     claims: z.array(SrmClaimSchema).min(1, "claims_required_for_provenance"),
+    // Signed evidence passports may travel with the proposal, but they are inert data until
+    // verified against server-owned trust anchors. A proposer cannot supply or override anchors.
+    evidencePassports: z.array(evidencePassportAttestationSchema).max(32).optional(),
     uncertainty: z.number().min(0).max(1),
     requestedCapabilityClass: capabilityClassEnum,
     estimatedIrreversibility: capabilityClassEnum,

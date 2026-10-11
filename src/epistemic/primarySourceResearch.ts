@@ -1,4 +1,5 @@
 import type { ResearchProvider, ResearchRequest, ResearchFinding } from './researchAgent.js';
+import { createHash } from 'node:crypto';
 
 /** Read-only source retrieval. Content is never treated as authority or an E0 score override. */
 export class PrimarySourceResearchProvider implements ResearchProvider {
@@ -28,14 +29,32 @@ export class PrimarySourceResearchProvider implements ResearchProvider {
         const reader = response.body?.getReader();
         if (!reader) { missing_observables.push(`${source}:empty_body`); continue; }
         let bytes = 0;
+        const chunks: Uint8Array[] = [];
         try {
           while (true) {
             const {done,value} = await reader.read();
             if (done) break;
             bytes += value.byteLength;
             if (bytes > 128 * 1024) throw new Error('source_too_large');
+            chunks.push(value);
           }
-          provenance_refs.push(`${source}#retrieved_bytes=${bytes}`);
+          const body = Buffer.concat(chunks);
+          // Bot challenges and access gates are not primary-source documents.
+          const probe = body.toString('utf8', 0, Math.min(body.length, 4096));
+          if (/verify that you(?:'|’)re not a robot|enable javascript and then reload the page|captcha|cf-chl-|access denied/i.test(probe)) {
+            missing_observables.push(`${source}:access_challenge_not_source`);
+            continue;
+          }
+          const digest = createHash('sha256').update(body).digest('hex');
+          provenance_refs.push(`${source}#sha256=${digest}`);
+          // An excerpt is an untrusted observation, not proof that the claim is true.
+          // Keep external content inert and bounded until a separate semantic verifier exists.
+          const raw = body.toString('utf8');
+          const excerpt = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+            .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600);
+          if (excerpt) missing_observables.push(`${source}:unverified_source_excerpt:${JSON.stringify(excerpt)}`);
+          else missing_observables.push(`${source}:no_extractable_text`);
         } finally { await reader.cancel().catch(() => undefined); }
       } catch {
         missing_observables.push(`${source}:fetch_failed_or_bounded`);

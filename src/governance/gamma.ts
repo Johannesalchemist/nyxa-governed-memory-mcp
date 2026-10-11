@@ -7,6 +7,7 @@ import { ConnectorError } from "../connector/errors.js";
 import { posix } from "node:path";
 import type { ValidatedProposal } from "./proposal.js";
 import type { HumanGrantCheckResult } from "./humanGrant.js";
+import { evidenceClaimDigest, type EvidencePassportDecision } from "../identity/unifiedTrustFabric.js";
 
 export type GammaOutcome = "ALLOW" | "DENY" | "ESCALATE" | "DEGRADE" | "UNKNOWN";
 export type GammaDomain = "C1" | "C2" | "C3" | "C4" | "C5" | null;
@@ -42,6 +43,9 @@ export type GammaContext = {
   /** Server-resolved downstream propagation count. Never trust proposal self-report. */
   effectRadius?: number;
   effectRadiusUnknown?: boolean;
+  /** Verified server-side from signed passports against pinned public trust anchors.
+   * Never populate this directly from proposal fields. */
+  evidencePassports?: readonly EvidencePassportDecision[];
 };
 
 const STALE_EVIDENCE_MS = 24 * 60 * 60 * 1000;
@@ -151,8 +155,12 @@ export function evaluateProposal(proposal: ValidatedProposal, context: GammaCont
     return escalate("C3", `capability_class_${trueClass}_requires_mandate`);
   }
 
-  // C4 — Provenance validity: every claim must carry a real (non-blank) source, and any claim
-  // sourced from external evidence must not be stale.
+  // C4 — Provenance validity. A source string is attribution, not attestation.
+  // Any presented passport must validate, and policy-marked consequential paths may rely on
+  // FACT/EXTERNAL_EVIDENCE only when a server-verified passport binds the exact claim,
+  // actor/action/target and transition. This closes "agent-generated success receipt" attacks.
+  const transitionId = `${proposal.provenance.taskId}:${proposal.provenance.runId}`;
+  let verifiedPassportCount = 0;
   for (const [index, claim] of proposal.claims.entries()) {
     if (claim.source.trim().length === 0) {
       return deny("C4", `missing_source_claim_${index}`);
@@ -166,6 +174,37 @@ export function evaluateProposal(proposal: ValidatedProposal, context: GammaCont
         return deny("C4", `stale_evidence_claim_${index}`);
       }
     }
+
+    const digest = evidenceClaimDigest(claim);
+    const passport = claim.attestationRef
+      ? context.evidencePassports?.find((candidate) =>
+          candidate.verified &&
+          candidate.attestationId === claim.attestationRef &&
+          candidate.claimDigest === digest &&
+          candidate.action === proposal.action &&
+          candidate.target === proposal.target &&
+          candidate.transitionId === transitionId)
+      : undefined;
+
+    // A claimed passport is never advisory. If supplied but unverifiable, fail closed.
+    if (claim.attestationRef && !passport) {
+      return deny("C4", `evidence_passport_invalid_claim_${index}`);
+    }
+    if (passport) verifiedPassportCount += 1;
+
+    // FACT and EXTERNAL_EVIDENCE are trust-bearing epistemic labels, not free-form
+    // proposer vocabulary. Without an independently verified Passport the proposer
+    // must use a non-authoritative tag such as CLAIM/MODEL_OUTPUT/HYPOTHESIS.
+    if ((claim.tag === "FACT" || claim.tag === "EXTERNAL_EVIDENCE") && !passport) {
+      return deny("C4", `evidence_passport_required_claim_${index}`);
+    }
+  }
+
+  // Some effects require at least one independently attested premise even if every
+  // proposer claim was honestly downgraded to CLAIM/MODEL_OUTPUT. This prevents
+  // semantic laundering (FACT -> CLAIM) from bypassing a trusted-evidence policy.
+  if (context.toolPolicy.requiresTrustedEvidence === true && verifiedPassportCount === 0) {
+    return deny("C4", "trusted_evidence_passport_required");
   }
 
   // C5 — Escalation reachability: high-risk or high-propagation actions route to a human.

@@ -16,7 +16,7 @@ async function server(options={}) {
  return {client,dataDir,close:()=>client.close()};
 }
 const payload={content:'Isolated pending candidate',candidate_type:'observation',source:'tool',scope:'project',purpose:'bounded contract test',confidence:0.8,importance:0.3};
-function proposal(overrides={}) {return {actor:'pending-test',action:'nyxa_memory_store_candidate',target:'memory:/candidate',scope:'isolated pending append',claims:[{tag:'FACT',statement:'isolated observation',source:'pending-candidate-e2e.test.mjs'}],uncertainty:0,requestedCapabilityClass:'I1',estimatedIrreversibility:'I1',provenance:{taskId:'pending-contract',runId:crypto.randomUUID(),requestingIdentity:'tester'},payload:{...payload},...overrides};}
+function proposal(overrides={}) {return {actor:'pending-test',action:'nyxa_memory_store_candidate',target:'memory:/candidate',scope:'isolated pending append',claims:[{tag:'CLAIM',statement:'isolated observation',source:'pending-candidate-e2e.test.mjs'}],uncertainty:0,requestedCapabilityClass:'I1',estimatedIrreversibility:'I1',provenance:{taskId:'pending-contract',runId:crypto.randomUUID(),requestingIdentity:'tester'},payload:{...payload},...overrides};}
 const parse=result=>JSON.parse(result.content[0].text);
 const call=(s,p)=>s.client.callTool({name:'nyxa_propose_action',arguments:{proposal:p}}).then(parse);
 async function lines(s,file='memory/candidates.jsonl'){return (await readFile(join(s.dataDir,file),'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}

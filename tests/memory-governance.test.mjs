@@ -55,7 +55,7 @@ function candidateProposal(overrides = {}) {
     action: "nyxa_memory_store_candidate",
     target: "self-model:memory-candidates",
     scope: "Phase C memory governance test",
-    claims: [{ tag: "FACT", statement: "test candidate", source: "memory-governance.test.mjs" }],
+    claims: [{ tag: "CLAIM", statement: "test candidate", source: "memory-governance.test.mjs" }],
     uncertainty: 0,
     requestedCapabilityClass: "I1",
     estimatedIrreversibility: "I1",

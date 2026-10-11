@@ -1,3 +1,5 @@
+import { registerSocialDeclarations } from './socialGatewayV1.js';
+import { registerExamDeclarations } from './examGatewayV1.js';
 export type Risk = "read" | "effect";
 export type ConnectorState = "ready" | "offline" | "not_configured" | "degraded";
 
@@ -64,6 +66,9 @@ export class ToolboxRegistry {
 }
 
 export const toolbox = new ToolboxRegistry();
+toolbox.registerConnector({ id: 'social-meta', kind: 'provider', state: 'not_configured', description: 'Instagram/Facebook read adapters awaiting trusted authority and personal OAuth.' });
+registerSocialDeclarations(toolbox);
+registerExamDeclarations(toolbox);
 
 const unavailable = (connector: string) => async () => ({
   status: "not_configured",
@@ -72,6 +77,19 @@ const unavailable = (connector: string) => async () => ({
 });
 
 toolbox.registerConnector({ id: "media", kind: "provider", state: "ready", description: "Governed media provider gateway." });
+// Artifact operations require explicit owner authority and a verified adapter.
+// These declarations must remain fail-closed until governed dispatch is wired.
+toolbox.registerConnector({ id: "media-exchange", kind: "artifact_transfer", state: "not_configured", description: "Owner-scoped audited media exchange; no executable transport enrolled." });
+for (const [name, description, risk] of [
+  ["media.artifact.inspect", "Inspect approved media artifact metadata.", "read"],
+  ["media.artifact.register", "Register an owner-approved media artifact.", "effect"],
+  ["media.artifact.fetch", "Fetch an approved artifact through an enrolled worker.", "effect"],
+  ["media.artifact.deliver", "Deliver an approved artifact to an enrolled destination.", "effect"]
+] as const) {
+  toolbox.register({ name, description, risk, version: "0.1.0", connector: "media-exchange", resourceKind: "media_artifact", evidence: true,
+    inputSchema: { type: "object", additionalProperties: false, properties: { artifact_id: { type: "string", maxLength: 128 } }, required: ["artifact_id"] },
+    handler: unavailable("media-exchange") });
+}
 toolbox.registerConnector({ id: "sascha-mac", kind: "remote_runner", state: "not_configured", description: "Outbound authenticated macOS/Xcode runner." });
 toolbox.registerConnector({ id: "server-c-unreal", kind: "remote_runner", state: "not_configured", description: "Governed Unreal Engine/GPU runner on Server C." });
 toolbox.registerConnector({ id: "apple-store", kind: "api", state: "not_configured", description: "App Store Connect adapter; credentials remain outside MCP results." });
@@ -130,3 +148,58 @@ for (const c of [
     handler: unavailable(c[2])
   });
 }
+
+/** Read-only preflight: never dispatches a job or grants authority. */
+toolbox.register({
+  name: "remote.job.preflight",
+  description: "Validates the shape of a bounded Server C job without granting authority or executing it.",
+  risk: "read",
+  version: "0.1.0",
+  connector: "server-c-unreal",
+  resourceKind: "remote_job",
+  evidence: true,
+  inputSchema: { type: "object", additionalProperties: false, properties: { request: { type: "object" } }, required: ["request"] },
+  handler: async (input) => {
+    const { assessRemoteJob } = await import("../organism/remoteJobGate.js");
+    const decision = assessRemoteJob(input.request, null, Date.now(), () => false);
+    return { status: "preflight_only", validEnvelope: decision.reason === "governance_not_allowed", authority: "NONE", executable: false, reason: decision.reason };
+  }
+});
+
+
+/** NYXA Living Enterprise: read-only evidence access, no alternate execution authority. */
+toolbox.registerConnector({
+  id: "living-enterprise",
+  kind: "simulation",
+  state: "ready",
+  description: "Read-only experimental economic evidence; simulation execution requires existing governed dispatch."
+});
+toolbox.register({
+  name: "economic.simulation.results",
+  description: "Returns labeled synthetic Living Enterprise results; never presents them as observed evidence.",
+  risk: "read",
+  version: "0.1.0",
+  connector: "living-enterprise",
+  resourceKind: "synthetic_evidence",
+  evidence: true,
+  inputSchema: { type: "object", additionalProperties: false },
+  handler: async () => {
+    const { readFile } = await import("node:fs/promises");
+    const { fileURLToPath } = await import("node:url");
+    const url = new URL("../../experiments/living-enterprise/paired-results-100.json", import.meta.url);
+    const parsed: unknown = JSON.parse(await readFile(fileURLToPath(url), "utf8"));
+    if (!parsed || typeof parsed !== "object" || !("protocol" in parsed) || !("summary" in parsed)) throw Error("simulation_evidence_invalid");
+    return { sourceKind: "simulation", empiricalClaim: false, authorityEffect: "NONE", evidence: parsed };
+  }
+});
+toolbox.register({
+  name: "economic.simulation.run",
+  description: "Reserved effect capability: simulation execution requires governed dispatch and is not enabled by toolbox.execute.",
+  risk: "effect",
+  version: "0.1.0",
+  connector: "living-enterprise",
+  resourceKind: "simulation_job",
+  evidence: true,
+  inputSchema: { type: "object", additionalProperties: false },
+  handler: async () => ({ status: "requires_governed_dispatch", executable: false })
+});

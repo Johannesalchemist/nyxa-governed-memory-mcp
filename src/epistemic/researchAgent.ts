@@ -28,6 +28,12 @@ export type ResearchRequest = {
 };
 
 export type ResearchFinding = {
+  verification?: {
+    model_provider_diversity: 'configured_distinct';
+    source_diversity: 'distinct_refs_unverified' | 'not_established';
+    independent_source_validation: false;
+    providers: Array<{id:string;providerIdentity:string;modelId:string}>;
+  };
   supporting_evidence: string[];
   disconfirming_evidence: string[];
   alternative_hypotheses: string[];

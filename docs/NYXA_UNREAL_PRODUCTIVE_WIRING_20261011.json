@@ -1,0 +1,122 @@
+{
+  "version": "unreal-productive-toolset-v1-candidate",
+  "checkedAt": "2026-10-11T16:44:05.882297+00:00",
+  "target": {
+    "B": "ubuntu-4gb-nbg1-1/nixa-01",
+    "C": "xv19616",
+    "endpoint": "100.85.17.115",
+    "B_access_user": "sentinelx"
+  },
+  "user_requirement": "Integrate through productive MCP and existing tunnel; do not present separate pilot as production",
+  "implemented": {
+    "fixed_readonly_collector": "/opt/nyxa-governed-memory-mcp-dev/experiments/unreal-inventory-v1-20261011/unreal_inventory.py",
+    "existing_worker_patch": "/opt/nyxa-governed-memory-mcp-dev/experiments/unreal-inventory-v1-20261011/c-worker.patch",
+    "tests_passed": 8,
+    "source_identity_checked": true,
+    "scope": "unreal:inventory",
+    "operation": "unreal.inventory",
+    "productionMutation": "NONE"
+  },
+  "proof_scope": "Isolated filesystem fixtures and actual candidate Worker.execute authentication, artifact persistence, independent Worker.observe readback, replay rejection. Inventory acquisition in Worker test substituted with deterministic fixture; not Server C live evidence.",
+  "verified_guards": [
+    "fixed host identity",
+    "caller path rejected",
+    "signed permit required",
+    "operation-specific scope",
+    "no symlink traversal",
+    "entry/asset/depth/time budgets",
+    "no configuration or asset content reads",
+    "scope/signature denial and request replay",
+    "receipt tampering rejected by separate observe"
+  ],
+  "artifacts": {
+    "unreal_inventory.py": "9df825eb9e5ebc2b6dd857da4f82aa8a64ee52a3e3888e1b640c970183b2d55d",
+    "c_worker.candidate.py": "60248fb1043d77af45b875e9d933327d60e8a8bcb447d936191a46a4c368041b",
+    "c_worker.before.py": "0cfab28c958fe35a7e3122b9df07e91145d3e8fd8cb4f10399c3f5ded4b67df8",
+    "c-worker.patch": "34c8c3481f7c38aac3c8588591399c5232bf176a00b957fe3e434868ccdb2f44",
+    "test_inventory.py": "75f519fd26aec207e7baf3c60a5feb112263dabd596f083302442448c7b9d71e",
+    "test-results.log": "e7e182240afa7533d93523f18bbff09440a0e0bc7cefb6ecf1801bb25bbf354b"
+  },
+  "installed_B_pilot_worker_before_sha256": "0cfab28c958fe35a7e3122b9df07e91145d3e8fd8cb4f10399c3f5ded4b67df8",
+  "activation_dependencies": [
+    {
+      "part": "C worker",
+      "required": "operator installs pinned read-only module and narrow existing-worker patch; verify actual C worker baseline hash first; retain read-only /opt and least-privilege service isolation; restart only fixed executor service"
+    },
+    {
+      "part": "B existing executor",
+      "required": "add unreal.inventory request/receipt and unreal:inventory scope binding to existing RemoteExecutor and pinned transport; retain principal, active mandate, Gamma/E0, replay and independent witness; do not reuse simulation mandate"
+    },
+    {
+      "part": "productive MCP",
+      "required": "wire existing executor dependencies in productive server and register actual executable action in effective profile; root-controlled transport configuration and exact operator-issued inventory mandate; no caller credentials"
+    },
+    {
+      "part": "deployment",
+      "required": "back up exact affected files/config; source and compiled version convergence; granted fixed restart of nyxa-tunnel-client.service; independent Sentinel/MCP recovery"
+    },
+    {
+      "part": "acceptance",
+      "required": "actual productive MCP inventory request -> C filesystem read -> signed receipt -> independent observe; verify schema/hash and compare discovered project paths; later scene/avatars/voice acceptance remains open"
+    }
+  ],
+  "rollback": "Before installation save exact B/C baseline hashes and original files/config. Restore only changed inventoried artifacts and revoke only new inventory mandate; targeted executor/tunnel restart; never remove existing diagnostic capability or foreign changes.",
+  "not_completed": [
+    "B productive dispatcher binding",
+    "operator-installed C collector",
+    "required actual OS activation permissions",
+    "live inventory",
+    "Unreal scene launch",
+    "A-B-A avatar switch"
+  ],
+  "status": "YELLOW; candidate tested, productive wiring incomplete",
+  "next": "Complete B dispatcher integration against authoritative source version, then operator-backed pinned C installation and productive MCP activation; no more standalone-pilot readiness claims",
+  "latest_user_scope": {
+    "at": "2026-10-11T16:45:24.006379+00:00",
+    "instruction": "All necessary tools in productive MCP; existing tunnel, not separate pilot",
+    "tool_set": [
+      {
+        "function": "unreal.inventory",
+        "effect": "fixed bounded filesystem inventory",
+        "status": "C worker candidate implemented and 8 tests passed; productive binding missing"
+      },
+      {
+        "function": "unreal.scene.status",
+        "effect": "actual managed scene/process identity, project/version and active avatar",
+        "status": "requires live C project inventory and actual scene binding"
+      },
+      {
+        "function": "unreal.scene.start",
+        "effect": "launch one operator-verified scene as normal user, fixed executable/project arguments, resource budget and owned process group",
+        "status": "not implemented; project path unknown"
+      },
+      {
+        "function": "unreal.scene.stop",
+        "effect": "stop only owned scene process group, never unrelated renderers",
+        "status": "not implemented; ownership and current scene not bound"
+      },
+      {
+        "function": "unreal.avatar.list",
+        "effect": "actual loadable registered assets from verified running project",
+        "status": "not implemented; filenames alone insufficient"
+      },
+      {
+        "function": "unreal.avatar.select",
+        "effect": "switch allowlisted actor through actual Unreal game-thread control and acknowledge active identity",
+        "status": "not implemented; Unreal control binding not inspected"
+      },
+      {
+        "function": "unreal.stream.observe",
+        "effect": "WebRTC decoded moving frames and received audio evidence",
+        "status": "not implemented; 8081 currently refuses connection"
+      },
+      {
+        "function": "unreal.conversation.verify",
+        "effect": "bounded utterance-response, voice/lip-sync/movement after A-B-A",
+        "status": "not implemented; actual voice and avatar chain not inspected"
+      }
+    ],
+    "constraints": "Every tool needs server-side scope and exact target/version binding, real ALLOW/effect/readback, real viable DENY, replay, rollback and known operator-backed executor; no arbitrary remote shell or self-issued grants.",
+    "acceptance": "Productive MCP call -> existing tunnel/dispatcher -> C effect -> independent observation -> durable evidence; registration alone never completion"
+  }
+}

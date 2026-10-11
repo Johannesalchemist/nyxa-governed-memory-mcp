@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {assessBlastRadius} from '../dist/emergence/blastRadiusGate.js';
+const x={scope:'isolated_simulation',affectedEntities:1,estimatedCostEur:0,reversible:true,affectsPeople:false,changesAuthority:false,touchesProduction:false,attestedByIndependentMonitor:true};
+test('independently attested bounded simulation auto routes without granting authority',()=>{const d=assessBlastRadius(x);assert.equal(d.route,'AUTO_SANDBOX');assert.equal(d.authorityGranted,false)});
+test('unattested self claim needs approval',()=>assert.equal(assessBlastRadius({...x,attestedByIndependentMonitor:false}).route,'HUMAN_APPROVAL'));
+test('bounded internal reversible change auto routes',()=>assert.equal(assessBlastRadius({...x,scope:'internal_reversible'}).route,'AUTO_BOUNDED'));
+test('production impact needs approval',()=>assert.equal(assessBlastRadius({...x,touchesProduction:true}).route,'HUMAN_APPROVAL'));
+test('people impact needs approval',()=>assert.equal(assessBlastRadius({...x,affectsPeople:true}).route,'HUMAN_APPROVAL'));
+test('authority escalation blocked',()=>assert.equal(assessBlastRadius({...x,changesAuthority:true}).route,'BLOCK'));
+test('unbounded cost needs approval',()=>assert.equal(assessBlastRadius({...x,estimatedCostEur:100}).route,'HUMAN_APPROVAL'));
+test('invalid assessment blocked',()=>assert.equal(assessBlastRadius({...x,affectedEntities:-1}).route,'BLOCK'));

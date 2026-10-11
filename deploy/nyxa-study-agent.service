@@ -1,0 +1,16 @@
+[Unit]
+Description=NYXA Study Fabric bounded study worker
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+User=sentinelx
+WorkingDirectory=/opt/nyxa-governed-memory-mcp-dev
+Environment=NYXA_STUDY_STATE_DIR=/var/lib/nyxa-study-agent
+ExecStart=/opt/nyxa-governed-memory-mcp-dev/scripts/study-cycle-runner.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/nyxa-study-agent
+[Install]
+WantedBy=multi-user.target
