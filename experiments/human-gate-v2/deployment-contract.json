@@ -1,0 +1,33 @@
+{
+  "schema": "nyxa-human-gate-deployment-v2",
+  "state": "prepared_pending_root_bootstrap_and_passkey_authorization",
+  "challenge": {
+    "nonce": "server_generated_cryptographic_random",
+    "expires_seconds": 120,
+    "replay": "single_use_consumed_before_verification"
+  },
+  "authenticator": {
+    "protocol": "WebAuthn",
+    "user_verification": "required",
+    "credential_public_key": "existing_registered_credential_server_verified",
+    "rp_id": "auth.future24.eu",
+    "origin": "https://auth.future24.eu"
+  },
+  "intent": {
+    "operation_id": "deploy-jeff-memory-gateway-v2",
+    "action": "deploy_nyxa_governed_memory_gateway",
+    "target": "nyxa-governed-memory-mcp.service",
+    "artifact_sha256": "aab6b0ddd8d5b0462e416f38560997126837e6827fed7bb6dd4a74cf185fdea2",
+    "max_executions": 1,
+    "ttl_seconds": 120
+  },
+  "enforcement": {
+    "executor": "/usr/local/sbin/nyxa-bounded-ops deploy-memory-gateway <grant-id>",
+    "grant_signature": "Ed25519",
+    "deny_unverified": true,
+    "atomic_consume": true,
+    "audit": true,
+    "rollback": true,
+    "jeff_execution_authority": false
+  }
+}

@@ -1,0 +1,29 @@
+[Unit]
+Description=NYXA Jeff evidence projection sync
+After=nyxa-governed-memory-mcp.service
+Requires=nyxa-governed-memory-mcp.service
+
+[Service]
+Type=oneshot
+User=nyxasync
+Group=nyxasync
+Environment=NYXA_JEFF_GATEWAY=http://127.0.0.1:18743/v1/jeff-evidence
+Environment=NYXA_JEFF_GATE_SECRET_FILE=/etc/nyxa/jeff-gateway.secret
+Environment=NYXA_JEFF_PROJECTION=/var/lib/nyxa-jeff-sync/jeff-memory-projection-v2.json
+Environment=NYXA_JEFF_MAX_AGE_SECONDS=86400
+ExecStart=/usr/bin/node /opt/nyxa-human-gate-v2/jeff-memory-sync.mjs
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_UNIX
+RestrictNamespaces=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadOnlyPaths=/etc/nyxa/jeff-gateway.secret
+ReadWritePaths=/var/lib/nyxa-jeff-sync

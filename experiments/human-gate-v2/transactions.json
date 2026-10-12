@@ -1,0 +1,14 @@
+{
+  "schema": "nyxa-human-gate-transactions-v2",
+  "transactions": [
+    {
+      "operation_id": "deploy-jeff-memory-gateway-v2",
+      "action": "deploy_nyxa_governed_memory_gateway",
+      "target": "nyxa-governed-memory-mcp.service",
+      "artifact_sha256": "aab6b0ddd8d5b0462e416f38560997126837e6827fed7bb6dd4a74cf185fdea2",
+      "artifact_path": "/opt/nyxa-governed-memory-mcp-dev/experiments/jeff-gate-isolated/dist/server.js",
+      "display": "Produktiven NYXA Memory MCP um den kontrollierten Jeff-Evidenz-Endpunkt aktualisieren; anschließend Healthcheck und automatischer Rollback bei Fehler.",
+      "ttl_seconds": 120
+    }
+  ]
+}

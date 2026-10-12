@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh NYXA Jeff evidence projection
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=2min
+RandomizedDelaySec=15s
+Persistent=true
+Unit=nyxa-jeff-sync.service
+
+[Install]
+WantedBy=timers.target
