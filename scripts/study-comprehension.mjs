@@ -16,14 +16,24 @@ try{
  if(!Array.isArray(state.studied))throw Error('studied_state_missing');
  if(!Array.isArray(state.comprehension))state.comprehension=[];
 
- const pending=state.comprehension.find(x=>x.status==='AWAITING_ANSWER'||x.status==='AWAITING_REVIEW');
+ const pending=state.comprehension.find(x=>x.module==='law-method'&&(x.status==='AWAITING_ANSWER'||x.status==='AWAITING_REVIEW'||x.status==='AWAITING_INDEPENDENT_REVIEW')) ?? state.comprehension.find(x=>x.status==='AWAITING_ANSWER'||x.status==='AWAITING_REVIEW'||x.status==='AWAITING_INDEPENDENT_REVIEW');
  let record=pending;
+ if(record?.module==='law-constitutional'&&!state.comprehension.some(x=>x.module==='law-method'&&x.status==='PASSED'&&x.verdict?.independentAdjudication===true)){
+  record=state.comprehension.find(x=>x.module==='law-method'&&['AWAITING_ANSWER','AWAITING_REVIEW','AWAITING_INDEPENDENT_REVIEW'].includes(x.status)) ?? null;
+ }
  if(!record){
-  const next=cases.find(x=>state.studied.includes(x.module)&&!state.comprehension.some(y=>y.module===x.module&&y.status==='PASSED'));
+  const next=cases.find(x=>(state.studied.includes(x.module)||state.unresolved?.includes(x.module))&&!state.comprehension.some(y=>y.module===x.module&&y.status==='PASSED'));
   if(!next){console.log(JSON.stringify({status:'CURRICULUM_REVIEWED',studied:state.studied}));}
   else{
    record={id:randomUUID(),...next,status:'AWAITING_ANSWER',createdAt:new Date().toISOString(),pass:false,authority:'NONE'};
    state.comprehension.push(record);
+  }
+ }
+ if(record){
+  // A prerequisite may be researched, but never promoted by a candidate-only exam.
+  if(record.module==='law-constitutional' && !state.comprehension.some(x=>x.module==='law-method'&&x.status==='PASSED'&&x.verdict?.independentAdjudication===true)){
+   console.log(JSON.stringify({status:'HOLD_PREREQUISITE',module:record.module,required:'law-method'}));
+   record=null;
   }
  }
  if(record){
@@ -42,8 +52,8 @@ try{
   if(record.status==='AWAITING_REVIEW'){
    try{
     const verdict=await claudeExaminer({moduleId:record.module,question:record.question,answer:record.answer,rubric:record.rubric,sourceRefs:entry.sourceRefs});
-    record.verdict=verdict;record.pass=verdict.status==='PASS_CANDIDATE';
-    record.status=record.pass?'PASSED':'NEEDS_RESTUDY';
+    record.verdict=verdict;record.pass=verdict.status==='PASS' && verdict.independentAdjudication===true;
+    record.status=record.pass?'PASSED':verdict.status==='FAIL'?'NEEDS_RESTUDY':'AWAITING_INDEPENDENT_REVIEW';
    }catch(e){record.lastError=String(e?.message||e).slice(0,200);}
   }
   const tmp=file+'.comprehension.'+process.pid;
