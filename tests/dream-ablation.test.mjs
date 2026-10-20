@@ -31,7 +31,7 @@ async function start(mode,enabled=true){
  const transport=new StdioClientTransport({command:'/usr/bin/node',args:['dist/index.js'],cwd:resolve('.'),env:{PATH:process.env.PATH,HOME:dataDir,NYXA_DATA_DIR:dataDir,NYXA_AGENT_MODE:'draft',NYXA_MCP_TOOL_PROFILE:'chatgpt_governed_execute',NYXA_DREAMING_ENABLED:String(enabled),NYXA_DREAM_MODE:mode},stderr:'pipe'});
  const client=new Client({name:'dream-ablation-proof',version:'1.0.0'});await client.connect(transport);return{client,dataDir};
 }
-function proposal(){return{actor:'ablation-test',action:'nyxa_dream_trigger',target:'memory:/dream',scope:'bounded ablation proof',claims:[{tag:'FACT',statement:'Derive from configured internal input subset only.',source:'tests/dream-ablation.test.mjs'}],uncertainty:0,requestedCapabilityClass:'I1',estimatedIrreversibility:'I1',expected_target:'nixa-01',provenance:{taskId:'dream-ablation',runId:randomUUID(),requestingIdentity:'integration-test'}};}
+function proposal(){return{actor:'ablation-test',action:'nyxa_dream_trigger',target:'memory:/dream',scope:'bounded ablation proof',claims:[{tag:'CLAIM',statement:'Derive from configured internal input subset only.',source:'tests/dream-ablation.test.mjs'}],uncertainty:0,requestedCapabilityClass:'I1',estimatedIrreversibility:'I1',expected_target:'nixa-01',provenance:{taskId:'dream-ablation',runId:randomUUID(),requestingIdentity:'integration-test'}};}
 for(const mode of ['full','audit_only','self_model_only'])test('real governed MCP mode '+mode,async t=>{
  const s=await start(mode);t.after(()=>s.client.close());
  const res=parse(await s.client.callTool({name:'nyxa_propose_action',arguments:{proposal:proposal()}}));assert.equal(res.policy_decision,'ALLOW');

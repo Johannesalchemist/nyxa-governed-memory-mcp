@@ -1,0 +1,134 @@
+{
+  "schema": "nyxa-memory-integrity-evidence-v1",
+  "at": "2026-10-20T19:02:23.298Z",
+  "roots": [
+    {
+      "root": "/opt/nyxa-governed-memory-mcp-runtime/data",
+      "audit": {
+        "file_sha256": "1d337e3c054e75038cde703c13b76909df7b3d8cbe9035ccfd4ccccee7c3391b",
+        "bytes": 170131,
+        "entries": 308,
+        "legacy_unhashed_entries": 15,
+        "legacy_first_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14
+        ],
+        "bad_json_count": 0,
+        "invalid_json_first_indices": [],
+        "hash_mismatch_count": 0,
+        "hash_mismatch_first_indices": [],
+        "link_mismatch_count": 0,
+        "link_mismatches": [],
+        "first_at": "2026-08-27T07:02:34.641Z",
+        "last_at": "2026-10-13T15:11:59.376Z",
+        "official": {
+          "valid": true,
+          "checked": 308
+        }
+      },
+      "candidates": {
+        "valid": true,
+        "file_sha256": "9ef37e182e88b09eaba423b03433a407730c7b41650c4a557c09b82a5eef6c71",
+        "bytes": 759,
+        "history_entries": 1
+      }
+    },
+    {
+      "root": "/opt/nyxa-governed-memory-mcp-runtime/data-tunnel-v2",
+      "audit": {
+        "file_sha256": "4ae269a676cce72ce5b982abcb609c742c644930a70bacc31b8c96a2890b81eb",
+        "bytes": 6016229,
+        "entries": 8137,
+        "legacy_unhashed_entries": 0,
+        "legacy_first_indices": [],
+        "bad_json_count": 0,
+        "invalid_json_first_indices": [],
+        "hash_mismatch_count": 0,
+        "hash_mismatch_first_indices": [],
+        "link_mismatch_count": 0,
+        "link_mismatches": [],
+        "first_at": "2026-09-11T20:14:16.521Z",
+        "last_at": "2026-10-20T18:48:14.576Z",
+        "official": {
+          "valid": true,
+          "checked": 8137
+        }
+      },
+      "candidates": {
+        "valid": true,
+        "file_sha256": "9936e216724b98c8f756d95639b4371d740c0903746f6351f65e5f2d0dc1c01a",
+        "bytes": 109288,
+        "history_entries": 56
+      }
+    },
+    {
+      "root": "/opt/nyxa-governed-memory-mcp-runtime/data-claude-bridge",
+      "audit": {
+        "file_sha256": "78f3e2ca9d6225236d50033a0bd5768c38d2eca3de2277edd8db31d15ebf2262",
+        "bytes": 223254,
+        "entries": 388,
+        "legacy_unhashed_entries": 15,
+        "legacy_first_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14
+        ],
+        "bad_json_count": 0,
+        "invalid_json_first_indices": [],
+        "hash_mismatch_count": 0,
+        "hash_mismatch_first_indices": [],
+        "link_mismatch_count": 1,
+        "link_mismatches": [
+          {
+            "index_zero_based": 284,
+            "at": "2026-09-06T15:54:50.181Z",
+            "refers_to_index_281": true,
+            "event_self_hash_valid": true
+          }
+        ],
+        "first_at": "2026-08-28T17:43:30.772Z",
+        "last_at": "2026-10-20T16:44:24.515Z",
+        "official": {
+          "valid": false,
+          "checked": 284,
+          "reason": "previous_hash_mismatch"
+        }
+      },
+      "candidates": {
+        "valid": true,
+        "file_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0,
+        "history_entries": 0
+      }
+    }
+  ],
+  "all_candidates_valid": true,
+  "all_audit_chains_valid": false,
+  "all_audit_fully_hashed": false,
+  "all_data_cryptographically_integral": false
+}
