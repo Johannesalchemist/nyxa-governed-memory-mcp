@@ -130,8 +130,8 @@ test("TEST C: correct target, observe_only (default) -> C0 PASS, gamma DENY at C
 });
 
 test("candidate persistence and MCP recall filters use isolated pre-seeded data", async context => {
-  const { client, dataDir } = await spawnServer();
-  context.after(() => client.close());
+  // Seed strictly BEFORE spawning the MCP process. Avoid uncoordinated writes under a live WriterLock.
+  const dataDir = await mkdtemp(join(tmpdir(), "nyxa-preseeded-memory-test-"));
   // Direct store fixture verifies persistence/recall, not MCP mutation authorization.
   const { CandidateStore } = await import("../dist/memory/candidateStore.js");
   const store = new CandidateStore(dataDir);
@@ -142,6 +142,8 @@ test("candidate persistence and MCP recall filters use isolated pre-seeded data"
   const restarted = new CandidateStore(dataDir);
   await restarted.init();
   assert.equal((await restarted.getLatestCandidate(record.id)).status, "pending");
+  const { client } = await spawnServer({ NYXA_DATA_DIR: dataDir });
+  context.after(() => client.close());
   const risk = parseResult(await client.callTool({ name: "nyxa_memory_recall_candidates", arguments: { candidate_type: "risk", limit: 10 } }));
   assert.equal(risk.candidates.length, 1);
   assert.equal(risk.candidates[0].id, record.id);

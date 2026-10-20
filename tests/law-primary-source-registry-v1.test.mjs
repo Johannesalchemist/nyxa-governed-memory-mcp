@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {legalPrimarySources,getLegalPrimarySource} from '../dist/science/lawPrimarySourceRegistryV1.js';
+test('two attributable public primary source records with no inflated peer review',()=>{assert.equal(legalPrimarySources.length,3);for(const s of legalPrimarySources){assert.equal(s.kind,'unverified');assert.equal(s.verification,'PUBLIC_URL_REVIEWED_NOT_HOST_ATTESTED');assert.ok(s.url.startsWith('https://'));assert.equal(getLegalPrimarySource(s.id),s)}});
+test('unknown primary source is rejected',()=>assert.throws(()=>getLegalPrimarySource('fabricated-case'),/unknown_or_invalid/));
