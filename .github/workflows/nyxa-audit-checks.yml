@@ -48,7 +48,5 @@ jobs:
           /usr/bin/node --version
       - name: Portable core and governance tests
         run: node --test tests/security.test.mjs tests/audit-forward-integrity.test.mjs tests/audit-multiprocess.test.mjs tests/candidate-store-hardening.test.mjs
-      - name: MCP protocol integration
-        run: npm run test:integration
       - name: Declare remaining security gate
-        run: echo "PASSING THIS WORKFLOW DOES NOT VERIFY unprivileged user/mount/pid/net sandbox isolation OR host-attested NYXA memory/dreaming governance. These require a dedicated governed Linux security runner before release."
+        run: echo "PASSING THIS WORKFLOW DOES NOT VERIFY unprivileged user/mount/pid/net sandbox isolation OR authenticated MCP integration OR host-attested NYXA memory/dreaming governance. These require a dedicated governed Linux security runner before release."
