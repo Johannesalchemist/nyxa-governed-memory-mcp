@@ -1,0 +1,36 @@
+name: NYXA Dedicated Sandbox and Host Governance Gate
+
+# Must run on a dedicated non-production runner with registered NYXA test identity.
+# A green portable CI job does not satisfy this required security gate.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-governance-and-sandbox:
+    runs-on: [self-hosted, linux, x64, nyxa-isolated]
+    timeout-minutes: 35
+    env:
+      CI: "true"
+    steps:
+      - name: Read-only checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate sandbox and trusted host prerequisites
+        run: |
+          set -eu
+          test -x /usr/bin/node
+          command -v capsh
+          command -v rsync
+          command -v unshare
+          unshare --user --map-root-user --mount --pid --fork --kill-child=SIGKILL -- /bin/true
+          test -n "${NYXA_ISOLATED_RUNNER_ATTESTATION:-}"
+      - name: Install lockfile dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Full security, MCP and adversarial tests
+        run: npm run test:all
+      - name: Full host-dependent learning and governance regressions
+        run: node --test tests/audit-forward-integrity.test.mjs tests/audit-multiprocess.test.mjs tests/candidate-store-hardening.test.mjs tests/memory-governance.test.mjs tests/dream-cycle-e2e.test.mjs tests/dream-ablation.test.mjs
