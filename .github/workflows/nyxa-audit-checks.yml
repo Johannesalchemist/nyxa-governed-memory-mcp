@@ -40,6 +40,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build sources and sandbox filter
         run: npm run build
+      - name: Provide the fixed Node path expected by legacy fixtures
+        run: |
+          if [ ! -e /usr/bin/node ]; then
+            sudo ln -s -- "$(command -v node)" /usr/bin/node
+          fi
+          /usr/bin/node --version
       - name: Portable core and governance tests
         run: node --test tests/security.test.mjs tests/audit-forward-integrity.test.mjs tests/audit-multiprocess.test.mjs tests/candidate-store-hardening.test.mjs tests/memory-governance.test.mjs tests/dream-cycle-e2e.test.mjs tests/dream-ablation.test.mjs
       - name: MCP protocol integration
