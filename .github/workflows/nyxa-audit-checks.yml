@@ -1,4 +1,4 @@
-name: NYXA Audit and Memory PR Checks
+name: NYXA Portable Audit and Memory CI
 
 on:
   pull_request:
@@ -17,11 +17,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: nyxa-audit-${{ github.workflow }}-${{ github.ref }}
+  group: nyxa-portable-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-regression:
+  portable-regressions:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -38,9 +38,11 @@ jobs:
           cache: npm
       - name: Clean dependency installation
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Build and MCP smoke test
-        run: npm run test:all
-      - name: Audit security and multiprocess tests
-        run: node --test tests/audit-forward-integrity.test.mjs tests/audit-multiprocess.test.mjs tests/security.test.mjs
-      - name: Memory and Dreaming integration tests
-        run: node --test tests/candidate-store-hardening.test.mjs tests/memory-governance.test.mjs tests/dream-cycle-e2e.test.mjs tests/dream-ablation.test.mjs
+      - name: Build sources and sandbox filter
+        run: npm run build
+      - name: Portable core and governance tests
+        run: node --test tests/security.test.mjs tests/audit-forward-integrity.test.mjs tests/audit-multiprocess.test.mjs tests/candidate-store-hardening.test.mjs tests/memory-governance.test.mjs tests/dream-cycle-e2e.test.mjs tests/dream-ablation.test.mjs
+      - name: MCP protocol integration
+        run: npm run test:integration
+      - name: Declare remaining security gate
+        run: echo "PASSING THIS WORKFLOW DOES NOT VERIFY unprivileged user/mount/pid/net sandbox isolation. A separately controlled Linux host must run the adversarial sandbox test suite before release."
