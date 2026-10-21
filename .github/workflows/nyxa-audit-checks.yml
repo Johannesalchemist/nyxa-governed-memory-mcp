@@ -1,0 +1,46 @@
+name: NYXA Audit and Memory PR Checks
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "scripts/**"
+      - "package*.json"
+      - ".github/workflows/nyxa-audit-checks.yml"
+  push:
+    branches:
+      - "hardening/audit-forward-guard-20261021"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nyxa-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: "true"
+    steps:
+      - name: Read-only checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Clean dependency installation
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build and MCP smoke test
+        run: npm run test:all
+      - name: Audit security and multiprocess tests
+        run: node --test tests/audit-forward-integrity.test.mjs tests/audit-multiprocess.test.mjs tests/security.test.mjs
+      - name: Memory and Dreaming integration tests
+        run: node --test tests/candidate-store-hardening.test.mjs tests/memory-governance.test.mjs tests/dream-cycle-e2e.test.mjs tests/dream-ablation.test.mjs
